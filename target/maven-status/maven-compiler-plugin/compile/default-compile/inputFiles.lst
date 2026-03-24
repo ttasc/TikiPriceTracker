@@ -1,0 +1,10 @@
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/client/TikiClientApp.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/common/Product.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/server/DatabaseManager.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/client/ClientConnection.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/server/TikiServer.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/common/CryptoUtils.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/common/Category.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/server/TikiService.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/server/ClientHandler.java
+/home/ttasc/Code/Java/TikiPriceTracker/src/main/java/com/tiki/common/Pair.java
