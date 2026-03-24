@@ -1,7 +1,7 @@
 package com.tiki.common;
 
 public class Category {
-    private String id;   // manual pair by getCategories()
+    private String id;   // manual pair
     private String text; // auto pair
     private String link; // auto pair
 

@@ -101,4 +101,14 @@ public class DatabaseManager {
         } catch (SQLException e) { e.printStackTrace(); }
         return history;
     }
+
+    public boolean isProductTracked(String productId) {
+        String sql = "SELECT is_tracked FROM products WHERE id = ? AND is_tracked = 1";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, productId);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.next(); // Trả về true nếu có bản ghi
+        } catch (SQLException e) { return false; }
+    }
 }
