@@ -3,23 +3,33 @@ package com.tiki.common;
 import java.io.Serializable;
 
 public class Pair<K, V> implements Serializable {
-    private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 1L;
 	private K key;
-    private V value;
+	private V value;
 
-    public Pair(K key, V value) {
-        this.key = key;
-        this.value = value;
-    }
+	public Pair(K key, V value) {
+		this.key = key;
+		this.value = value;
+	}
 
-    public K getKey() { return key; }
-    public void setKey(K key) { this.key = key; }
+	public K getKey() {
+		return key;
+	}
 
-    public V getValue() { return value; }
-    public void setValue(V value) { this.value = value; }
+	public void setKey(K key) {
+		this.key = key;
+	}
 
-    @Override
-    public String toString() {
-        return key + " : " + value;
-    }
+	public V getValue() {
+		return value;
+	}
+
+	public void setValue(V value) {
+		this.value = value;
+	}
+
+	@Override
+	public String toString() {
+		return key + " : " + value;
+	}
 }

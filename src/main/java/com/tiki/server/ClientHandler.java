@@ -1,4 +1,3 @@
-// File: src/main/java/com/tiki/server/ClientHandler.java
 package com.tiki.server;
 
 import java.io.DataInputStream;
@@ -38,7 +37,6 @@ public class ClientHandler implements Runnable {
 		try (DataInputStream in = new DataInputStream(socket.getInputStream());
 				DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
-			// --- BƯỚC 1: Handshake RSA/AES (Giữ nguyên như trước) ---
 			byte[] pubKeyBytes = serverKeyPair.getPublic().getEncoded();
 			out.writeInt(pubKeyBytes.length);
 			out.write(pubKeyBytes);
@@ -50,13 +48,15 @@ public class ClientHandler implements Runnable {
 			byte[] aesKeyBytes = CryptoUtils.decryptRSA(encKeyBytes, serverKeyPair.getPrivate());
 			this.sessionKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-			// --- BƯỚC 2: Vòng lặp xử lý Request ---
+			System.out.println("[INFO] Secure handshake completed with: " + socket.getRemoteSocketAddress());
+
 			while (true) {
 				String encryptedReq = in.readUTF();
 				String jsonReq = CryptoUtils.decryptAES(encryptedReq, sessionKey);
 				JsonObject request = JsonParser.parseString(jsonReq).getAsJsonObject();
-				System.out.println(request);
+
 				String action = request.get("action").getAsString();
+				System.out.println("[LOG] Request received: " + action + " from " + socket.getRemoteSocketAddress());
 
 				String responseJson = "";
 
@@ -85,36 +85,29 @@ public class ClientHandler implements Runnable {
 					boolean shouldTrack = request.get("isTracked").getAsBoolean();
 
 					if (shouldTrack) {
-						// Nếu bật theo dõi: Lấy thông tin thật để lưu vào DB (nếu chưa có)
 						Product pDetail = tikiService.getProductDetail(pId);
 						dbManager.saveProduct(pDetail);
 						dbManager.updateTracking(pId, true);
-						// Lưu mốc giá đầu tiên
 						dbManager.addPriceHistory(pId, pDetail.getPrice());
-						System.out.println("[Server] Bắt đầu theo dõi: " + pId);
+						System.out.println("[INFO] Started tracking product ID: " + pId);
 					} else {
-						// Nếu tắt: Chỉ cập nhật flag trong DB về 0
 						dbManager.updateTracking(pId, false);
-						System.out.println("[Server] Hủy theo dõi: " + pId);
+						System.out.println("[INFO] Stopped tracking product ID: " + pId);
 					}
 					responseJson = "{\"status\":\"success\"}";
 					break;
 
 				case "GET_DETAIL":
 					String id = request.get("productId").getAsString();
-
-					// 1. Kiểm tra xem sản phẩm có đang được theo dõi không
 					boolean tracked = dbManager.isProductTracked(id);
 
-					// 2. Chỉ lấy lịch sử nếu đang theo dõi
 					List<Pair<String, Long>> history = tracked ? dbManager.getPriceHistory(id)
 							: new java.util.ArrayList<>();
 
-					// 3. Luôn lấy reviews text
 					List<String> reviews = tikiService.getProductReviews(id);
 
 					JsonObject detail = new JsonObject();
-					detail.addProperty("isTracked", tracked); // Gửi thêm flag này về
+					detail.addProperty("isTracked", tracked);
 					detail.add("history", gson.toJsonTree(history));
 					detail.add("reviews", gson.toJsonTree(reviews));
 
@@ -122,12 +115,11 @@ public class ClientHandler implements Runnable {
 					break;
 				}
 
-				// Gửi phản hồi bảo mật
 				out.writeUTF(CryptoUtils.encryptAES(responseJson, sessionKey));
 				out.flush();
 			}
 		} catch (Exception e) {
-			System.out.println("Client ngắt kết nối.");
+			System.out.println("[INFO] Client disconnected: " + socket.getRemoteSocketAddress());
 		}
 	}
 }
