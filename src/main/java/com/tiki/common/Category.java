@@ -10,7 +10,11 @@ public class Category {
         this.text = text;
         this.link = link;
     }
-    public String getId() { return id; }
+    public Category(String id, String text) {
+		this.id = id;
+		this.text = text;
+	}
+	public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
     public String getText() { return text; }

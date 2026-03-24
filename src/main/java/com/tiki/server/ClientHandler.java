@@ -18,11 +18,13 @@ public class ClientHandler implements Runnable {
 	private KeyPair serverKeyPair;
 	private SecretKey sessionKey; // Khóa AES dùng chung
     private DatabaseManager dbManager;
+    private TikiService tikiService;
 
-    public ClientHandler(Socket socket, KeyPair keyPair, DatabaseManager dbManager) {
+    public ClientHandler(Socket socket, KeyPair keyPair, DatabaseManager dbManager, TikiService tikiService) {
         this.socket = socket;
         this.serverKeyPair = keyPair;
         this.dbManager = dbManager;
+        this.setTikiService(tikiService);
     }
 
 	@Override
@@ -79,5 +81,13 @@ public class ClientHandler implements Runnable {
 		} catch (Exception e) {
 			System.err.println("Kết nối bị ngắt: " + e.getMessage());
 		}
+	}
+
+	public TikiService getTikiService() {
+		return tikiService;
+	}
+
+	public void setTikiService(TikiService tikiService) {
+		this.tikiService = tikiService;
 	}
 }
