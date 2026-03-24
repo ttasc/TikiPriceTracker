@@ -4,6 +4,11 @@
   <artifactId>TikiPriceTracker</artifactId>
   <version>1.0.0</version>
   <dependencies>
+  	<dependency>
+	  <groupId>com.formdev</groupId>
+	  <artifactId>flatlaf</artifactId>
+	  <version>3.2.5</version>
+	</dependency>
     <!-- Xử lý JSON từ Tiki API -->
     <dependency>
       <groupId>com.google.code.gson</groupId>

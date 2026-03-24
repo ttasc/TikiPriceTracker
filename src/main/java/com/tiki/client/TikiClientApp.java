@@ -25,12 +25,14 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.data.category.DefaultCategoryDataset;
 
+import com.formdev.flatlaf.FlatLightLaf;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -383,13 +385,18 @@ public class TikiClientApp extends JFrame {
 	}
 
 	public static void main(String[] args) {
-		String host = "localhost";
-		if (args.length > 0) {
-			host = args[0];
-		}
-		final String finalHost = host;
-		SwingUtilities.invokeLater(() -> {
-			new TikiClientApp(finalHost).setVisible(true);
-		});
+	    System.setProperty("awt.useSystemAAFontSettings","on");
+	    System.setProperty("swing.aatext", "true");
+
+	    System.setProperty("flatlaf.uiScale", "1.1");
+	    
+	    try {
+	        UIManager.setLookAndFeel(new FlatLightLaf());
+	    } catch (Exception ex) {
+	        System.err.println("Failed to initialize LaF");
+	    }
+
+	    String host = args.length > 0 ? args[0] : "localhost";
+	    SwingUtilities.invokeLater(() -> new TikiClientApp(host).setVisible(true));
 	}
 }
