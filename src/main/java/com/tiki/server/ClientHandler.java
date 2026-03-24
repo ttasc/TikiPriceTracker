@@ -75,6 +75,11 @@ public class ClientHandler implements Runnable {
 					responseJson = gson.toJson(products);
 					break;
 
+				case "GET_TRACKED_LIST":
+					List<Product> trackedList = dbManager.getTrackedProducts();
+					responseJson = gson.toJson(trackedList);
+					break;
+
 				case "TOGGLE_TRACK":
 					String pId = request.get("productId").getAsString();
 					boolean shouldTrack = request.get("isTracked").getAsBoolean();
@@ -96,24 +101,25 @@ public class ClientHandler implements Runnable {
 					break;
 
 				case "GET_DETAIL":
-				    String id = request.get("productId").getAsString();
-				    
-				    // 1. Kiểm tra xem sản phẩm có đang được theo dõi không
-				    boolean tracked = dbManager.isProductTracked(id);
-				    
-				    // 2. Chỉ lấy lịch sử nếu đang theo dõi
-				    List<Pair<String, Long>> history = tracked ? dbManager.getPriceHistory(id) : new java.util.ArrayList<>();
-				    
-				    // 3. Luôn lấy reviews text
-				    List<String> reviews = tikiService.getProductReviews(id);
-				    
-				    JsonObject detail = new JsonObject();
-				    detail.addProperty("isTracked", tracked); // Gửi thêm flag này về
-				    detail.add("history", gson.toJsonTree(history));
-				    detail.add("reviews", gson.toJsonTree(reviews));
-				    
-				    responseJson = gson.toJson(detail);
-				    break;
+					String id = request.get("productId").getAsString();
+
+					// 1. Kiểm tra xem sản phẩm có đang được theo dõi không
+					boolean tracked = dbManager.isProductTracked(id);
+
+					// 2. Chỉ lấy lịch sử nếu đang theo dõi
+					List<Pair<String, Long>> history = tracked ? dbManager.getPriceHistory(id)
+							: new java.util.ArrayList<>();
+
+					// 3. Luôn lấy reviews text
+					List<String> reviews = tikiService.getProductReviews(id);
+
+					JsonObject detail = new JsonObject();
+					detail.addProperty("isTracked", tracked); // Gửi thêm flag này về
+					detail.add("history", gson.toJsonTree(history));
+					detail.add("reviews", gson.toJsonTree(reviews));
+
+					responseJson = gson.toJson(detail);
+					break;
 				}
 
 				// Gửi phản hồi bảo mật

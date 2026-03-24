@@ -42,32 +42,44 @@ import com.tiki.common.Category;
 
 public class TikiClientApp extends JFrame {
 	private static final long serialVersionUID = 1L;
+
 	private ClientConnection connection;
+	private String serverIp;
+
 	private JPanel productPanel; // Nơi hiển thị danh sách SP
 	private JList<Category> categoryList;
 	private JTextField searchField;
 
 	private int currentPage = 1;
 
-	public TikiClientApp() {
-		setTitle("Tiki Price Tracker - Bảo mật Hybrid");
-		setSize(1200, 800);
-		setDefaultCloseOperation(EXIT_ON_CLOSE);
-		setLocationRelativeTo(null);
+	public TikiClientApp(String host) {
+	    this.serverIp = host; // Lưu IP được truyền vào
+	    
+	    setTitle("Tiki Price Tracker - Kết nối tới: " + serverIp);
+	    setSize(1200, 800);
+	    setDefaultCloseOperation(EXIT_ON_CLOSE);
+	    setLocationRelativeTo(null);
 
-		initConnection();
-		setupUI();
-		loadCategories();
+	    initConnection(); // Sẽ sử dụng serverIp ở bước này
+	    setupUI();
+	    loadCategories();
 	}
 
 	private void initConnection() {
-		connection = new ClientConnection();
-		try {
-			connection.connect("localhost", 12345);
-		} catch (Exception e) {
-			JOptionPane.showMessageDialog(this, "Không thể kết nối Server!");
-			System.exit(0);
-		}
+	    connection = new ClientConnection();
+	    try {
+	        // Kết nối tới IP và Port (12345)
+	        connection.connect(serverIp, 12345);
+	        System.out.println("Kết nối thành công tới Server: " + serverIp);
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        JOptionPane.showMessageDialog(this, 
+	            "Lỗi: Không thể kết nối tới Server tại địa chỉ " + serverIp + 
+	            "\n\nChi tiết: " + e.getMessage(), 
+	            "Lỗi kết nối", 
+	            JOptionPane.ERROR_MESSAGE);
+	        System.exit(0);
+	    }
 	}
 
 	private void setupUI() {
@@ -88,7 +100,7 @@ public class TikiClientApp extends JFrame {
 		categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		JScrollPane sidebarScroll = new JScrollPane(categoryList);
 		sidebarScroll.setPreferredSize(new Dimension(250, 0));
-
+		
 		// 3. Vùng hiển thị nội dung (Center)
 		productPanel = new JPanel(new GridLayout(0, 3, 10, 10));
 		JScrollPane contentScroll = new JScrollPane(productPanel);
@@ -96,7 +108,26 @@ public class TikiClientApp extends JFrame {
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarScroll, contentScroll);
 		add(splitPane, BorderLayout.CENTER);
 
-		// Trong setupUI(), thêm một Panel ở phía Nam của content area
+		// Tracked List
+		JButton btnViewTracked = new JButton("★ Sản phẩm đang theo dõi");
+		btnViewTracked.setBackground(new Color(255, 255, 204));
+		btnViewTracked.setFocusable(false);
+
+		// Chèn nút vào phía trên sidebarScroll hoặc phía dưới
+		JPanel sidebarPanel = new JPanel(new BorderLayout());
+		sidebarPanel.add(new JLabel(" DANH MỤC", JLabel.CENTER), BorderLayout.NORTH);
+		sidebarPanel.add(sidebarScroll, BorderLayout.CENTER);
+		sidebarPanel.add(btnViewTracked, BorderLayout.SOUTH);
+
+		splitPane.setLeftComponent(sidebarPanel);
+
+		btnViewTracked.addActionListener(e -> {
+		    categoryList.clearSelection();
+		    searchField.setText("");
+		    loadTrackedProducts();
+		});
+
+		// 4. Paging
 		JPanel paginationPanel = new JPanel();
 		JButton btnPrev = new JButton("< Trang trước");
 		JButton btnNext = new JButton("Trang sau >");
@@ -106,7 +137,6 @@ public class TikiClientApp extends JFrame {
 		paginationPanel.add(lblPage);
 		paginationPanel.add(btnNext);
 
-		// Thêm sự kiện
 		btnNext.addActionListener(e -> {
 			currentPage++;
 			lblPage.setText("Trang: " + currentPage);
@@ -120,7 +150,6 @@ public class TikiClientApp extends JFrame {
 			}
 		});
 
-		// Gắn vào giao diện (Dùng BorderLayout để Panel này nằm dưới cùng)
 		JPanel centerContainer = new JPanel(new BorderLayout());
 		centerContainer.add(contentScroll, BorderLayout.CENTER);
 		centerContainer.add(paginationPanel, BorderLayout.SOUTH);
@@ -149,6 +178,32 @@ public class TikiClientApp extends JFrame {
 		}
 
 		renderProductList(finalUrl);
+	}
+	
+	private void loadTrackedProducts() {
+	    productPanel.removeAll();
+	    try {
+	        // 1. Gửi yêu cầu lấy danh sách đã lưu từ DB Server
+	        String jsonResp = connection.sendRequest("{\"action\":\"GET_TRACKED_LIST\"}");
+	        JsonArray array = JsonParser.parseString(jsonResp).getAsJsonArray();
+
+	        if (array.size() == 0) {
+	            productPanel.setLayout(new BorderLayout());
+	            productPanel.add(new JLabel("Bạn chưa theo dõi sản phẩm nào.", JLabel.CENTER));
+	        } else {
+	            productPanel.setLayout(new GridLayout(0, 3, 10, 10));
+	            for (JsonElement el : array) {
+	                productPanel.add(createProductCard(el.getAsJsonObject()));
+	            }
+	        }
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+	    productPanel.revalidate();
+	    productPanel.repaint();
+	    
+	    // Ẩn thanh phân trang vì danh sách này thường không quá dài 
+	    // Hoặc bạn có thể giữ lại nếu muốn.
 	}
 
 	// --- LOGIC XỬ LÝ DỮ LIỆU ---
@@ -215,15 +270,6 @@ public class TikiClientApp extends JFrame {
 		card.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
 
 		// Thumbnail
-//		try {
-//			@SuppressWarnings("deprecation")
-//			URL url = new URL(product.get("thumbnail_url").getAsString());
-//			ImageIcon icon = new ImageIcon(
-//					new ImageIcon(url).getImage().getScaledInstance(150, 150, Image.SCALE_SMOOTH));
-//			card.add(new JLabel(icon), BorderLayout.CENTER);
-//		} catch (Exception e) {
-//			card.add(new JLabel("No Image"), BorderLayout.CENTER);
-//		}
 		JLabel imgLabel = new JLabel("Loading...", JLabel.CENTER);
 		String imgUrl = product.get("thumbnail_url").getAsString();
 
@@ -366,6 +412,18 @@ public class TikiClientApp extends JFrame {
 	}
 
 	public static void main(String[] args) {
-		SwingUtilities.invokeLater(() -> new TikiClientApp().setVisible(true));
+	    // Mặc định là localhost nếu người dùng không nhập gì
+	    String host = "localhost"; 
+	    
+	    if (args.length > 0) {
+	        host = args[0];
+	    }
+	    
+	    final String finalHost = host;
+	    
+	    // Khởi chạy giao diện
+	    SwingUtilities.invokeLater(() -> {
+	        new TikiClientApp(finalHost).setVisible(true);
+	    });
 	}
 }
