@@ -1,4 +1,3 @@
-// File: src/main/java/com/tiki/server/DatabaseManager.java
 package com.tiki.server;
 
 import com.tiki.common.Pair;
