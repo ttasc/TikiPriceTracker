@@ -30,7 +30,7 @@ public class TikiServer {
 			System.out.println("[SYSTEM] --- TIKI TRACKER SERVER IS READY ---");
 
 			// Start the background processes
-			startAutoPriceUpdater(dbManager, tikiService);
+//			startAutoPriceUpdater(dbManager, tikiService);
 			startAdminConsole(dbManager, tikiService);
 
 			// Start Socket Server
@@ -77,7 +77,7 @@ public class TikiServer {
 								dbManager.addPriceHistory(id, p.getPrice());
 								System.out.println("[ADMIN] [LOG] Updated ID: " + id + " | Price: " + p.getPrice());
 								updateCount++;
-//								Thread.sleep(1000); // Rate limit protection
+								Thread.sleep(1000); // Rate limit protection
 							} catch (Exception e) {
 								System.err.println("[ADMIN] [ERROR] Failed to update ID " + id + ": " + e.getMessage());
 							}
@@ -97,6 +97,7 @@ public class TikiServer {
 		consoleThread.start();
 	}
 
+	@SuppressWarnings("unused")
 	private static void startAutoPriceUpdater(DatabaseManager dbManager, TikiService tikiService) {
 		ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
@@ -125,7 +126,7 @@ public class TikiServer {
 						System.out.println("[SCHEDULER] ID " + id + ": Price unchanged (" + lastPrice + ").");
 					}
 
-//					Thread.sleep(2000); // Conservative rate limiting for auto-tasks
+					Thread.sleep(2000); // Conservative rate limiting for auto-tasks
 				} catch (Exception e) {
 					System.err.println("[SCHEDULER] [ERROR] Failed to process ID " + id + ": " + e.getMessage());
 				}

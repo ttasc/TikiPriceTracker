@@ -67,7 +67,7 @@ public class DataCrawlerApp {
 					System.out.println("[INFO] Saved page " + page + " | Total so far: " + totalSaved);
 
 					// Throttle to avoid 403 Forbidden
-					Thread.sleep(2000);
+//					Thread.sleep(2000);
 
 					if (totalSaved >= 4500) {
 						System.out.println("[CRAWLER] Goal reached. Stopping population.");
