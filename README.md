@@ -14,7 +14,7 @@
     java -jar TikiTracker-Server.jar
     ```
 
-2. Run `TikiTracker-Client.jar` for client, note that you can specify the server ip, default is `localhost`:
+2. Run `TikiTracker-Client.jar` for client, note that you can specify the server ip. If not, the default is `localhost`:
 
     ```
     java -jar TikiTracker-Client.jar [server ip]
@@ -24,10 +24,8 @@
 
 ### Server
 
-> #### Note:
-> - You need to run the server first before the client
-> - The current version cannot automatically update prices; you have to run a manual update command through the server prompt.
+Server will automatically update the price of products have been crawled every 3 hours in the background.
 
-##### Update the price of all tracked products:
+### Crawling For Testing
 
-In the server console, type `update` to run the update.
+To crawl over 4000 tiki products, download `TikiTracker-Crawler.jar` from [releases page](https://github.com/ttasc/TikiPriceTracker/releases/latest) and run it everyday in one month.
