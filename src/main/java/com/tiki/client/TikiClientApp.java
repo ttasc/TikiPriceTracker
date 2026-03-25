@@ -99,6 +99,7 @@ public class TikiClientApp extends JFrame {
 
 		productPanel = new JPanel(new GridLayout(0, 3, 10, 10));
 		JScrollPane contentScroll = new JScrollPane(productPanel);
+		contentScroll.getVerticalScrollBar().setUnitIncrement(40); 
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarScroll, contentScroll);
 		add(splitPane, BorderLayout.CENTER);
@@ -387,8 +388,8 @@ public class TikiClientApp extends JFrame {
 	public static void main(String[] args) {
 	    System.setProperty("awt.useSystemAAFontSettings","on");
 	    System.setProperty("swing.aatext", "true");
-
 	    System.setProperty("flatlaf.uiScale", "1.1");
+	    UIManager.put("ScrollPane.smoothScrolling", true);
 	    
 	    try {
 	        UIManager.setLookAndFeel(new FlatLightLaf());
