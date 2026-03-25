@@ -75,10 +75,17 @@ public class ClientHandler implements Runnable {
 					responseJson = gson.toJson(products);
 					break;
 
+//				case "GET_TRACKED_LIST":
+//					List<Product> trackedList = dbManager.getTrackedProducts();
+//					responseJson = gson.toJson(trackedList);
+//					break;
+				
 				case "GET_TRACKED_LIST":
-					List<Product> trackedList = dbManager.getTrackedProducts();
-					responseJson = gson.toJson(trackedList);
-					break;
+				    int trackedPage = request.has("page") ? request.get("page").getAsInt() : 1;
+				    int limitPerRequest = request.has("limit") ? request.get("limit").getAsInt() : 50;
+				    List<Product> trackedList = dbManager.getTrackedProducts(trackedPage, limitPerRequest);
+				    responseJson = gson.toJson(trackedList);
+				    break;
 
 				case "TOGGLE_TRACK":
 					String pId = request.get("productId").getAsString();

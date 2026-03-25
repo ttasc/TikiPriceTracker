@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import com.tiki.common.CryptoUtils;
 import com.tiki.common.Product;
@@ -21,7 +23,11 @@ public class TikiServer {
 			TikiService tikiService = new TikiService();
 			KeyPair serverKeys = CryptoUtils.generateRSAKeyPair();
 
+			System.out.println("[System] Initialize: Security keys generated.");
+			System.out.println("[System] Initialize: Database connection established.");
 			System.out.println("[INFO] --- TIKI TRACKER SERVER STARTED ---");
+
+			startAutoPriceUpdater(dbManager, tikiService);
 
 			startAdminConsole(dbManager, tikiService);
 
@@ -83,5 +89,53 @@ public class TikiServer {
 		});
 		consoleThread.setDaemon(true);
 		consoleThread.start();
+	}
+
+	private static void startAutoPriceUpdater(DatabaseManager dbManager, TikiService tikiService) {
+		ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+		Runnable updateTask = () -> {
+			System.out.println("\n[Auto-Update] Task started at: " + new java.util.Date());
+			List<String> trackedIds = dbManager.getTrackedProductIds();
+
+			if (trackedIds.isEmpty()) {
+				System.out.println("[Auto-Update] Skip: No products are currently being tracked.");
+				return;
+			}
+
+			int changedCount = 0;
+			for (String id : trackedIds) {
+				try {
+					// 1. Lấy giá hiện tại từ Tiki API
+					Product currentProduct = tikiService.getProductDetail(id);
+					long newPrice = currentProduct.getPrice();
+
+					// 2. Lấy giá cuối cùng trong Database
+					long lastPrice = dbManager.getLastPrice(id);
+
+					// 3. So sánh: Chỉ lưu nếu giá thay đổi hoặc chưa có lịch sử
+					if (newPrice != lastPrice) {
+						dbManager.addPriceHistory(id, newPrice);
+						System.out.println(
+								"[Auto-Update] Change detected for ID " + id + ": " + lastPrice + " -> " + newPrice);
+						changedCount++;
+					} else
+						System.out.println(
+								"[Auto-Update] ID " + id + ": Price unchanged (" + lastPrice + "). Record skipped.");
+
+//					Thread.sleep(2000);
+				} catch (Exception e) {
+                    System.err.println("[Auto-Update] Failed to process ID " + id + ": " + e.getMessage());
+				}
+			}
+            System.out.println("[Auto-Update] Cycle finished. Total changes recorded: " + changedCount);
+		};
+
+		// Lập lịch: Chạy ngay lập tức lần đầu, sau đó lặp lại mỗi 3 tiếng
+		// 0: Initial delay (chạy ngay)
+		// 3: Period (khoảng cách giữa các lần chạy)
+		// TimeUnit.HOURS: Đơn vị thời gian
+		scheduler.scheduleAtFixedRate(updateTask, 0, 3, TimeUnit.HOURS);
+        System.out.println("[System] Scheduler: Auto-update enabled (Interval: 3 Hours).");
 	}
 }

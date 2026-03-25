@@ -2,11 +2,20 @@ package com.tiki.client;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Image;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
@@ -26,10 +35,14 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.border.EmptyBorder;
 
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
+import org.jfree.chart.labels.StandardCategoryToolTipGenerator;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.renderer.category.LineAndShapeRenderer;
 import org.jfree.data.category.DefaultCategoryDataset;
 
 import com.formdev.flatlaf.FlatLightLaf;
@@ -41,41 +54,58 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.tiki.common.Category;
 
+/**
+ * Tiki Price Tracker Client Features: Hybrid Encryption, Price History Chart
+ * with Tooltips, Manual Sync, Pagination, and Tracked List Management.
+ */
 public class TikiClientApp extends JFrame {
 	private static final long serialVersionUID = 1L;
 
+	// View Modes for logic handling
+	private enum ViewMode {
+		CATEGORY, SEARCH, TRACKED
+	}
+
+	private ViewMode currentViewMode = ViewMode.CATEGORY;
+
 	private ClientConnection connection;
 	private String serverIp;
+	private int currentPage = 1;
 
+	// UI Components
 	private JPanel productPanel;
 	private JList<Category> categoryList;
 	private JTextField searchField;
+	private JLabel lblPageStatus;
+	private JScrollPane contentScroll;
 
-	private int currentPage = 1;
+	// Simple memory cache for images to ensure smooth scrolling
+	private final ConcurrentHashMap<String, ImageIcon> imageCache = new ConcurrentHashMap<>();
 
 	public TikiClientApp(String host) {
 		this.serverIp = host;
-
-		setTitle("Tiki Price Tracker - Connected to: " + serverIp);
-		setSize(1200, 800);
-		setDefaultCloseOperation(EXIT_ON_CLOSE);
-		setLocationRelativeTo(null);
-
+		setupBaseFrame();
 		initConnection();
 		setupUI();
 		loadCategories();
+	}
+
+	private void setupBaseFrame() {
+		setTitle("Tiki Price Tracker | Server: " + serverIp);
+		setSize(1280, 850);
+		setDefaultCloseOperation(EXIT_ON_CLOSE);
+		setLocationRelativeTo(null);
 	}
 
 	private void initConnection() {
 		connection = new ClientConnection();
 		try {
 			connection.connect(serverIp, 12345);
-			System.out.println("[INFO] Successfully connected to Server: " + serverIp);
+			System.out.println("[Network] Connected to " + serverIp);
 		} catch (Exception e) {
-			System.err.println("[ERROR] Connection failed to " + serverIp + ": " + e.getMessage());
-			JOptionPane.showMessageDialog(this,
-					"Error: Could not connect to Server at " + serverIp + "\n\nDetails: " + e.getMessage(),
-					"Connection Error", JOptionPane.ERROR_MESSAGE);
+			System.err.println("[Critical] Connection failed: " + e.getMessage());
+			JOptionPane.showMessageDialog(this, "Cannot connect to Server at " + serverIp, "Network Error",
+					JOptionPane.ERROR_MESSAGE);
 			System.exit(0);
 		}
 	}
@@ -83,228 +113,246 @@ public class TikiClientApp extends JFrame {
 	private void setupUI() {
 		setLayout(new BorderLayout());
 
-		JPanel topPanel = new JPanel(new BorderLayout(10, 10));
-		topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+		// 1. TOP PANEL: Search Bar
+		JPanel topPanel = new JPanel(new BorderLayout(15, 0));
+		topPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
 		searchField = new JTextField();
+		searchField.putClientProperty("JTextField.placeholderText", "Enter product name...");
 		JButton btnSearch = new JButton("Search");
-		topPanel.add(new JLabel("Search Product: "), BorderLayout.WEST);
+		btnSearch.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+		topPanel.add(new JLabel("Search: "), BorderLayout.WEST);
 		topPanel.add(searchField, BorderLayout.CENTER);
 		topPanel.add(btnSearch, BorderLayout.EAST);
 		add(topPanel, BorderLayout.NORTH);
 
+		// 2. LEFT PANEL: Categories & Tracked Button
 		categoryList = new JList<>();
 		categoryList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		categoryList.setFixedCellHeight(35);
 		JScrollPane sidebarScroll = new JScrollPane(categoryList);
-		sidebarScroll.setPreferredSize(new Dimension(250, 0));
 
-		productPanel = new JPanel(new GridLayout(0, 3, 10, 10));
-		JScrollPane contentScroll = new JScrollPane(productPanel);
-		contentScroll.getVerticalScrollBar().setUnitIncrement(40); 
-
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarScroll, contentScroll);
-		add(splitPane, BorderLayout.CENTER);
-
-		JButton btnViewTracked = new JButton("★ Tracked Products");
-		btnViewTracked.setBackground(new Color(255, 255, 204));
-		btnViewTracked.setFocusable(false);
+		JButton btnTrackedView = new JButton("★ My Tracked Products");
+		btnTrackedView.setPreferredSize(new Dimension(0, 50));
+		btnTrackedView.setBackground(new Color(255, 248, 220)); // Cornsilk
+		btnTrackedView.setFont(new Font("SansSerif", Font.BOLD, 13));
 
 		JPanel sidebarPanel = new JPanel(new BorderLayout());
+		sidebarPanel.setBorder(new EmptyBorder(0, 10, 10, 0));
+		sidebarPanel.setPreferredSize(new Dimension(280, 0));
 		sidebarPanel.add(new JLabel(" CATEGORIES", JLabel.CENTER), BorderLayout.NORTH);
 		sidebarPanel.add(sidebarScroll, BorderLayout.CENTER);
-		sidebarPanel.add(btnViewTracked, BorderLayout.SOUTH);
+		sidebarPanel.add(btnTrackedView, BorderLayout.SOUTH);
 
-		splitPane.setLeftComponent(sidebarPanel);
+		// 3. CENTER PANEL: Product Grid
+		productPanel = new JPanel(new GridLayout(0, 3, 15, 15));
+		productPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+		contentScroll = new JScrollPane(productPanel);
+		contentScroll.getVerticalScrollBar().setUnitIncrement(25); // Smooth scrolling fix
 
-		btnViewTracked.addActionListener(e -> {
-			System.out.println("[LOG] Loading tracked products list...");
-			categoryList.clearSelection();
-			searchField.setText("");
-			loadTrackedProducts();
-		});
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarPanel, null);
+		splitPane.setDividerLocation(280);
+		add(splitPane, BorderLayout.CENTER);
 
-		JPanel paginationPanel = new JPanel();
-		JButton btnPrev = new JButton("< Previous");
-		JButton btnNext = new JButton("Next >");
-		JLabel lblPage = new JLabel("Page: 1");
+		// 4. BOTTOM PANEL: Pagination
+		JPanel paginationPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+		JButton btnPrev = new JButton("Previous");
+		JButton btnNext = new JButton("Next Page");
+		lblPageStatus = new JLabel("Page 1");
+		lblPageStatus.setFont(new Font("SansSerif", Font.BOLD, 12));
 
 		paginationPanel.add(btnPrev);
-		paginationPanel.add(lblPage);
+		paginationPanel.add(lblPageStatus);
 		paginationPanel.add(btnNext);
-
-		btnNext.addActionListener(e -> {
-			currentPage++;
-			lblPage.setText("Page: " + currentPage);
-			refreshList();
-		});
-		btnPrev.addActionListener(e -> {
-			if (currentPage > 1) {
-				currentPage--;
-				lblPage.setText("Page: " + currentPage);
-				refreshList();
-			}
-		});
 
 		JPanel centerContainer = new JPanel(new BorderLayout());
 		centerContainer.add(contentScroll, BorderLayout.CENTER);
 		centerContainer.add(paginationPanel, BorderLayout.SOUTH);
 		splitPane.setRightComponent(centerContainer);
 
-		btnSearch.addActionListener(e -> performSearch());
+		// --- EVENT LISTENERS ---
+		btnSearch.addActionListener(e -> {
+			currentViewMode = ViewMode.SEARCH;
+			currentPage = 1;
+			categoryList.clearSelection();
+			refreshList();
+		});
+
 		categoryList.addListSelectionListener(e -> {
-			if (!e.getValueIsAdjusting())
-				loadProductsByCategory();
+			if (!e.getValueIsAdjusting() && categoryList.getSelectedValue() != null) {
+				currentViewMode = ViewMode.CATEGORY;
+				currentPage = 1;
+				searchField.setText("");
+				refreshList();
+			}
+		});
+
+		btnTrackedView.addActionListener(e -> {
+			currentViewMode = ViewMode.TRACKED;
+			currentPage = 1;
+			categoryList.clearSelection();
+			searchField.setText("");
+			refreshList();
+		});
+
+		btnNext.addActionListener(e -> {
+			currentPage++;
+			refreshList();
+		});
+		btnPrev.addActionListener(e -> {
+			if (currentPage > 1) {
+				currentPage--;
+				refreshList();
+			}
 		});
 	}
 
 	private void refreshList() {
-		Category selected = categoryList.getSelectedValue();
-		String query = searchField.getText();
-		String finalUrl;
-
-		if (query != null && !query.isEmpty()) {
-			finalUrl = "https://tiki.vn/api/v2/products?limit=40&q=" + query.replace(" ", "+") + "&page=" + currentPage;
-		} else if (selected != null) {
-			finalUrl = "https://tiki.vn/api/personalish/v1/blocks/listings?category=" + selected.getId() + "&page="
-					+ currentPage;
-		} else {
-			return;
-		}
-
-		renderProductList(finalUrl);
-	}
-
-	private void loadTrackedProducts() {
 		productPanel.removeAll();
-		try {
-			String jsonResp = connection.sendRequest("{\"action\":\"GET_TRACKED_LIST\"}");
-			JsonArray array = JsonParser.parseString(jsonResp).getAsJsonArray();
+		lblPageStatus.setText("Page: " + currentPage);
+		String jsonRequest = "";
 
-			if (array.size() == 0) {
-				productPanel.setLayout(new BorderLayout());
-				productPanel.add(new JLabel("You are not tracking any products yet.", JLabel.CENTER));
-			} else {
-				productPanel.setLayout(new GridLayout(0, 3, 10, 10));
-				for (JsonElement el : array) {
-					productPanel.add(createProductCard(el.getAsJsonObject()));
+		try {
+			switch (currentViewMode) {
+			case CATEGORY:
+				Category selected = categoryList.getSelectedValue();
+				if (selected != null) {
+					String url = "https://tiki.vn/api/personalish/v1/blocks/listings?category=" + selected.getId()
+							+ "&page=" + currentPage;
+					jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
+				}
+				break;
+			case SEARCH:
+				String q = searchField.getText().trim();
+				if (!q.isEmpty()) {
+					String url = "https://tiki.vn/api/v2/products?limit=40&q=" + q.replace(" ", "+") + "&page="
+							+ currentPage;
+					jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
+				}
+				break;
+			case TRACKED:
+				jsonRequest = "{\"action\":\"GET_TRACKED_LIST\", \"page\":" + currentPage + ", \"limit\":50}";
+				break;
+			}
+
+			if (!jsonRequest.isEmpty()) {
+				System.out.println("[Request] Sending action: " + currentViewMode + " Page " + currentPage);
+				String resp = connection.sendRequest(jsonRequest);
+				JsonArray array = JsonParser.parseString(resp).getAsJsonArray();
+
+				if (array.size() == 0) {
+					productPanel.setLayout(new BorderLayout());
+					productPanel.add(new JLabel("No products found.", JLabel.CENTER));
+				} else {
+					productPanel.setLayout(new GridLayout(0, 3, 15, 15));
+					for (JsonElement el : array)
+						productPanel.add(createProductCard(el.getAsJsonObject()));
 				}
 			}
-			System.out.println("[INFO] Loaded " + array.size() + " tracked products.");
 		} catch (Exception e) {
-			System.err.println("[ERROR] Failed to load tracked products: " + e.getMessage());
+			System.err.println("[Error] Refresh failed: " + e.getMessage());
 		}
+
 		productPanel.revalidate();
 		productPanel.repaint();
+		contentScroll.getVerticalScrollBar().setValue(0);
 	}
 
 	private void loadCategories() {
 		try {
-			System.out.println("[LOG] Requesting categories from server...");
 			String resp = connection.sendRequest("{\"action\":\"GET_CATEGORIES\"}");
-
 			java.lang.reflect.Type listType = new TypeToken<List<Category>>() {
 			}.getType();
 			List<Category> categories = new Gson().fromJson(resp, listType);
 
 			DefaultListModel<Category> model = new DefaultListModel<>();
-			for (Category c : categories) {
-				if (c.getId() != null) {
+			for (Category c : categories)
+				if (c.getId() != null)
 					model.addElement(c);
-				}
-			}
 			categoryList.setModel(model);
-			System.out.println("[INFO] Categories updated.");
 		} catch (Exception e) {
-			System.err.println("[ERROR] Failed to load categories: " + e.getMessage());
+			System.err.println("[Error] Category load failed: " + e.getMessage());
 		}
-	}
-
-	private void performSearch() {
-		String query = searchField.getText();
-		System.out.println("[LOG] Performing search for: " + query);
-		renderProductList("https://tiki.vn/api/v2/products?limit=40&q=" + query.replace(" ", "+"));
-	}
-
-	private void loadProductsByCategory() {
-		Category selected = categoryList.getSelectedValue();
-		if (selected != null) {
-			System.out.println("[LOG] Loading products for category: " + selected.getText());
-			renderProductList(
-					"https://tiki.vn/api/personalish/v1/blocks/listings?category=" + selected.getId() + "&page=1");
-		}
-	}
-
-	private void renderProductList(String apiUrl) {
-		productPanel.removeAll();
-		try {
-			String jsonResp = connection.sendRequest("{\"action\":\"GET_PRODUCTS\", \"url\":\"" + apiUrl + "\"}");
-			JsonArray array = JsonParser.parseString(jsonResp).getAsJsonArray();
-
-			for (JsonElement el : array) {
-				JsonObject obj = el.getAsJsonObject();
-				productPanel.add(createProductCard(obj));
-			}
-			System.out.println("[INFO] Rendered " + array.size() + " products.");
-		} catch (Exception e) {
-			System.err.println("[ERROR] Failed to render product list: " + e.getMessage());
-		}
-		productPanel.revalidate();
-		productPanel.repaint();
 	}
 
 	private JPanel createProductCard(JsonObject product) {
 		JPanel card = new JPanel(new BorderLayout());
-		card.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+		card.setBorder(BorderFactory.createLineBorder(new Color(230, 230, 230), 1));
+		card.setBackground(Color.WHITE);
+		card.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-		JLabel imgLabel = new JLabel("Loading...", JLabel.CENTER);
-		String imgUrl = product.get("thumbnail_url").getAsString();
+		// 1. Image handling with Cache & Threading
+		JLabel imgLabel = new JLabel(" ", JLabel.CENTER);
+		imgLabel.setPreferredSize(new Dimension(180, 180));
+		String imgUrl = product.has("thumbnail_url") ? product.get("thumbnail_url").getAsString() : "";
 
-		new Thread(() -> {
-			try {
-				java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-				java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-						.uri(java.net.URI.create(imgUrl)).header("User-Agent", "Mozilla/5.0").build();
-				byte[] imageBytes = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofByteArray()).body();
-
-				ImageIcon icon = new ImageIcon(imageBytes);
-				Image scaled = icon.getImage().getScaledInstance(150, 150, Image.SCALE_SMOOTH);
-
-				SwingUtilities.invokeLater(() -> {
-					imgLabel.setIcon(new ImageIcon(scaled));
-					imgLabel.setText("");
-				});
-			} catch (Exception e) {
-				SwingUtilities.invokeLater(() -> imgLabel.setText("No Image"));
+		if (!imgUrl.isEmpty()) {
+			if (imageCache.containsKey(imgUrl)) {
+				imgLabel.setIcon(imageCache.get(imgUrl));
+			} else {
+				new Thread(() -> {
+					try {
+						HttpClient client = HttpClient.newHttpClient();
+						HttpRequest req = HttpRequest.newBuilder().uri(URI.create(imgUrl))
+								.header("User-Agent", "Mozilla/5.0").build();
+						byte[] data = client.send(req, HttpResponse.BodyHandlers.ofByteArray()).body();
+						ImageIcon icon = new ImageIcon(
+								new ImageIcon(data).getImage().getScaledInstance(160, 160, Image.SCALE_SMOOTH));
+						imageCache.put(imgUrl, icon);
+						SwingUtilities.invokeLater(() -> imgLabel.setIcon(icon));
+					} catch (Exception e) {
+						imgLabel.setText("No Image");
+					}
+				}).start();
 			}
-		}).start();
-
+		}
 		card.add(imgLabel, BorderLayout.CENTER);
 
+		// 2. Tracking Badge
 		if (product.has("isTracked") && product.get("isTracked").getAsBoolean()) {
-			JLabel trackBadge = new JLabel(" ★ TRACKING ");
-			trackBadge.setOpaque(true);
-			trackBadge.setBackground(new Color(255, 215, 0));
-			trackBadge.setForeground(Color.BLACK);
-			trackBadge.setFont(new Font("Arial", Font.BOLD, 10));
-			card.add(trackBadge, BorderLayout.NORTH);
+			JLabel badge = new JLabel(" ★ TRACKING ", JLabel.CENTER);
+			badge.setOpaque(true);
+			badge.setBackground(new Color(255, 215, 0));
+			badge.setFont(new Font("SansSerif", Font.BOLD, 10));
+			card.add(badge, BorderLayout.NORTH);
 		} else {
 			JPanel spacer = new JPanel();
+			spacer.setBackground(Color.WHITE);
 			spacer.setPreferredSize(new Dimension(0, 20));
 			card.add(spacer, BorderLayout.NORTH);
 		}
 
-		JPanel info = new JPanel(new GridLayout(2, 1));
-		JLabel nameLabel = new JLabel(
-				"<html><body style='width: 120px'>" + product.get("name").getAsString() + "</body></html>");
-		JLabel priceLabel = new JLabel(product.get("price").getAsLong() + " VND");
-		priceLabel.setForeground(Color.RED);
+		// 3. Information (Name & Price)
+		JPanel info = new JPanel(new GridLayout(2, 1, 5, 5));
+		info.setBackground(Color.WHITE);
+		info.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-		info.add(nameLabel);
-		info.add(priceLabel);
+		String cleanName = product.get("name").getAsString();
+		JLabel lblName = new JLabel("<html><body style='width: 150px'>" + cleanName + "</body></html>");
+		lblName.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+		JLabel lblPrice = new JLabel(String.format("%,d VND", product.get("price").getAsLong()));
+		lblPrice.setForeground(new Color(204, 0, 0));
+		lblPrice.setFont(new Font("SansSerif", Font.BOLD, 14));
+
+		info.add(lblName);
+		info.add(lblPrice);
 		card.add(info, BorderLayout.SOUTH);
 
-		card.addMouseListener(new java.awt.event.MouseAdapter() {
-			public void mouseClicked(java.awt.event.MouseEvent evt) {
+		card.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
 				showProductDetail(product);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				card.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				card.setBorder(BorderFactory.createLineBorder(new Color(230, 230, 230), 1));
 			}
 		});
 
@@ -313,53 +361,76 @@ public class TikiClientApp extends JFrame {
 
 	private void showProductDetail(JsonObject productObj) {
 		String productId = productObj.get("id").getAsString();
-		System.out.println("[LOG] Opening details for Product ID: " + productId);
-
-		JDialog detailDlg = new JDialog(this, "Product Details", true);
-		detailDlg.setSize(900, 700);
-		detailDlg.setLayout(new BorderLayout());
+		JDialog detailDlg = new JDialog(this, "Product Detail: " + productId, true);
+		detailDlg.setSize(1000, 750);
 		detailDlg.setLocationRelativeTo(this);
 
 		try {
 			String resp = connection.sendRequest("{\"action\":\"GET_DETAIL\", \"productId\":\"" + productId + "\"}");
 			JsonObject data = JsonParser.parseString(resp).getAsJsonObject();
 
-			boolean isTrackedOnServer = data.get("isTracked").getAsBoolean();
+			boolean isTracked = data.get("isTracked").getAsBoolean();
 			JsonArray historyArr = data.getAsJsonArray("history");
 			JsonArray reviewsArr = data.getAsJsonArray("reviews");
 
-			JCheckBox chkTrack = new JCheckBox("Track this product's price to view history chart", isTrackedOnServer);
-			chkTrack.setFont(new Font("Arial", Font.BOLD, 13));
-			detailDlg.add(chkTrack, BorderLayout.NORTH);
+			// --- NORTH: Control Header ---
+			JPanel header = new JPanel(new BorderLayout());
+			header.setBorder(new EmptyBorder(10, 15, 10, 15));
+			JCheckBox chkTrack = new JCheckBox("Enable Price Tracking (Auto-sync every 3 hours)", isTracked);
+			chkTrack.setFont(new Font("SansSerif", Font.BOLD, 14));
+			header.add(chkTrack, BorderLayout.WEST);
+			detailDlg.add(header, BorderLayout.NORTH);
 
+			// --- CENTER: Chart with Tooltips ---
 			JPanel centerPanel = new JPanel(new BorderLayout());
-			if (isTrackedOnServer && historyArr.size() > 0) {
+			if (isTracked && historyArr.size() > 0) {
 				DefaultCategoryDataset dataset = new DefaultCategoryDataset();
 				for (JsonElement e : historyArr) {
 					JsonObject h = e.getAsJsonObject();
-					dataset.addValue(h.get("value").getAsLong(), "Price", h.get("key").getAsString().substring(5, 16));
+					String time = h.get("key").getAsString();
+					// Label for X-Axis: MM-dd HH:mm
+					String axisLabel = time.substring(5, 16);
+					dataset.addValue(h.get("value").getAsLong(), "Price", axisLabel);
 				}
-				JFreeChart chart = ChartFactory.createLineChart("Price History Trend", "Scan Date", "VND", dataset);
+
+				// Create Chart with Tooltips enabled (true as second to last param)
+				JFreeChart chart = ChartFactory.createLineChart("Price Variation History", "Timestamp", "Price (VND)",
+						dataset, org.jfree.chart.plot.PlotOrientation.VERTICAL, true, true, false);
+
+				// Customize Tooltips
+				CategoryPlot plot = chart.getCategoryPlot();
+				LineAndShapeRenderer renderer = new LineAndShapeRenderer();
+				renderer.setDefaultShapesVisible(true);
+				renderer.setDefaultToolTipGenerator(new StandardCategoryToolTipGenerator("Time: {1} | Price: {2} VND",
+						java.text.NumberFormat.getIntegerInstance()));
+				plot.setRenderer(renderer);
+
 				centerPanel.add(new ChartPanel(chart), BorderLayout.CENTER);
 			} else {
-				JLabel msgLabel = new JLabel(
-						"<html><center>No price data available yet.<br>Please enable 'Track' and return after the server updates prices.</center></html>",
-						JLabel.CENTER);
-				msgLabel.setFont(new Font("Arial", Font.ITALIC, 16));
-				msgLabel.setForeground(Color.GRAY);
-				centerPanel.add(msgLabel, BorderLayout.CENTER);
+				centerPanel.add(new JLabel(
+						"<html><center><font size='5'>No price data yet.</font><br>Enable tracking and wait for the next system update.</center></html>",
+						JLabel.CENTER));
 			}
 			detailDlg.add(centerPanel, BorderLayout.CENTER);
 
-			StringBuilder sb = new StringBuilder("USER REVIEWS:\n");
-			for (JsonElement e : reviewsArr) {
-				sb.append("- ").append(e.getAsString()).append("\n\n");
-			}
+			// --- SOUTH: Reviews Section ---
+			StringBuilder sb = new StringBuilder("CUSTOMER REVIEWS (TEXT ONLY):\n\n");
+			if (reviewsArr.size() == 0)
+				sb.append("No reviews found for this product.");
+			for (JsonElement e : reviewsArr)
+				sb.append("● ").append(e.getAsString()).append("\n\n");
+
 			JTextArea txtReviews = new JTextArea(sb.toString());
 			txtReviews.setEditable(false);
 			txtReviews.setLineWrap(true);
-			detailDlg.add(new JScrollPane(txtReviews), BorderLayout.SOUTH);
+			txtReviews.setWrapStyleWord(true);
+			txtReviews.setBackground(new Color(245, 245, 245));
+			JScrollPane reviewScroll = new JScrollPane(txtReviews);
+			reviewScroll.setPreferredSize(new Dimension(0, 200));
+			reviewScroll.setBorder(BorderFactory.createTitledBorder("Reviews"));
+			detailDlg.add(reviewScroll, BorderLayout.SOUTH);
 
+			// Checkbox logic
 			chkTrack.addActionListener(e -> {
 				try {
 					boolean selected = chkTrack.isSelected();
@@ -367,37 +438,35 @@ public class TikiClientApp extends JFrame {
 							+ "\", \"isTracked\":" + selected + "}");
 					productObj.addProperty("isTracked", selected);
 					refreshList();
-
-					if (selected) {
+					if (selected)
 						JOptionPane.showMessageDialog(detailDlg,
-								"Tracking started. The chart will update after the next server sync (06:00).");
-					}
-					System.out.println("[INFO] Tracking status changed for " + productId + " to " + selected);
+								"Success! We will now record price changes for this item.");
 				} catch (Exception ex) {
-					System.err.println("[ERROR] Failed to toggle tracking: " + ex.getMessage());
+					System.err.println("[Error] Toggle failed.");
 				}
 			});
 
 		} catch (Exception e) {
-			System.err.println("[ERROR] Failed to fetch product details: " + e.getMessage());
+			System.err.println("[Error] Detail fetch failed.");
 		}
 
 		detailDlg.setVisible(true);
 	}
 
 	public static void main(String[] args) {
-	    System.setProperty("awt.useSystemAAFontSettings","on");
-	    System.setProperty("swing.aatext", "true");
-	    System.setProperty("flatlaf.uiScale", "1.1");
-	    UIManager.put("ScrollPane.smoothScrolling", true);
-	    
-	    try {
-	        UIManager.setLookAndFeel(new FlatLightLaf());
-	    } catch (Exception ex) {
-	        System.err.println("Failed to initialize LaF");
-	    }
+		// Performance & UI Optimization
+		System.setProperty("awt.useSystemAAFontSettings", "on");
+		System.setProperty("swing.aatext", "true");
+		System.setProperty("flatlaf.uiScale", "1.1");
+		UIManager.put("ScrollPane.smoothScrolling", true);
 
-	    String host = args.length > 0 ? args[0] : "localhost";
-	    SwingUtilities.invokeLater(() -> new TikiClientApp(host).setVisible(true));
+		try {
+			UIManager.setLookAndFeel(new FlatLightLaf());
+		} catch (Exception ex) {
+			System.err.println("[System] FlatLaf failed to initialize.");
+		}
+
+		String host = (args.length > 0) ? args[0] : "localhost";
+		SwingUtilities.invokeLater(() -> new TikiClientApp(host).setVisible(true));
 	}
 }

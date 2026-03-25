@@ -106,6 +106,29 @@ public class DatabaseManager {
 		return list;
 	}
 
+	public List<Product> getTrackedProducts(int page, int limit) {
+		List<Product> list = new ArrayList<>();
+		int offset = (page - 1) * limit;
+		String sql = "SELECT p.*, "
+				+ "(SELECT price FROM price_history WHERE product_id = p.id ORDER BY timestamp DESC LIMIT 1) as current_price "
+				+ "FROM products p WHERE p.is_tracked = 1 " + "LIMIT ? OFFSET ?";
+
+		try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+			pstmt.setInt(1, limit);
+			pstmt.setInt(2, offset);
+			ResultSet rs = pstmt.executeQuery();
+
+			while (rs.next()) {
+				list.add(new Product(rs.getString("id"), rs.getString("name"), rs.getLong("current_price"),
+						rs.getString("thumbnail"), true));
+			}
+		} catch (SQLException e) {
+			System.err.println("[Database] Error fetching tracked list: " + e.getMessage());
+		}
+		return list;
+	}
+
 	public List<Pair<String, Long>> getPriceHistory(String productId) {
 		List<Pair<String, Long>> history = new ArrayList<>();
 		String sql = "SELECT timestamp, price FROM price_history WHERE product_id = ? ORDER BY timestamp ASC";
@@ -119,6 +142,22 @@ public class DatabaseManager {
 			System.err.println("[ERROR] Failed to fetch price history for " + productId + ": " + e.getMessage());
 		}
 		return history;
+	}
+
+	public long getLastPrice(String productId) {
+		String sql = "SELECT price FROM price_history WHERE product_id = ? ORDER BY timestamp DESC LIMIT 1";
+		try (Connection conn = DriverManager.getConnection(URL); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+			pstmt.setString(1, productId);
+			ResultSet rs = pstmt.executeQuery();
+
+			if (rs.next()) {
+				return rs.getLong("price");
+			}
+		} catch (SQLException e) {
+			System.err.println("[ERROR] Failed to fetch last price for " + productId + ": " + e.getMessage());
+		}
+		return -1;
 	}
 
 	public boolean isProductTracked(String productId) {
