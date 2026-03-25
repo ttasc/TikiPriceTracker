@@ -4,11 +4,11 @@
   <artifactId>TikiPriceTracker</artifactId>
   <version>1.0.0</version>
   <dependencies>
-  	<dependency>
-	  <groupId>com.formdev</groupId>
-	  <artifactId>flatlaf</artifactId>
-	  <version>3.2.5</version>
-	</dependency>
+    <dependency>
+      <groupId>com.formdev</groupId>
+      <artifactId>flatlaf</artifactId>
+      <version>3.2.5</version>
+    </dependency>
     <!-- Xử lý JSON từ Tiki API -->
     <dependency>
       <groupId>com.google.code.gson</groupId>
@@ -73,6 +73,25 @@
                 <descriptorRef>jar-with-dependencies</descriptorRef>
               </descriptorRefs>
               <finalName>TikiTracker-Client</finalName>
+              <appendAssemblyId>false</appendAssemblyId>
+            </configuration>
+          </execution>
+
+          <!-- Cấu hình tạo file JAR cho Crawler -->
+          <execution>
+            <id>make-crawler</id>
+            <phase>package</phase>
+            <goals><goal>single</goal></goals>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>com.tiki.server.DataCrawlerApp</mainClass>
+                </manifest>
+              </archive>
+              <descriptorRefs>
+                <descriptorRef>jar-with-dependencies</descriptorRef>
+              </descriptorRefs>
+              <finalName>TikiTracker-Crawler</finalName>
               <appendAssemblyId>false</appendAssemblyId>
             </configuration>
           </execution>

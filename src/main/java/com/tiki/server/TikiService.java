@@ -32,17 +32,18 @@ public class TikiService {
 				.header("Accept", "application/json").GET().build();
 
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
 		if (response.statusCode() != 200) {
-			System.err
-					.println("[ERROR] API request failed for URL: " + url + " | Status Code: " + response.statusCode());
+			System.err.println("[ERROR] API call failed. URL: " + url + " | Status Code: " + response.statusCode());
 			throw new RuntimeException("API request failed with status code: " + response.statusCode());
 		}
 		return response.body();
 	}
 
 	public List<Category> getCategories() throws Exception {
-		System.out.println("[LOG] Fetching categories from Tiki...");
+		System.out.println("[SERVICE] Fetching category menu config from Tiki...");
 		String json = sendGet("https://api.tiki.vn/raiden/v2/menu-config");
+
 		JsonObject root = gson.fromJson(json, JsonObject.class);
 		JsonArray items = root.getAsJsonObject("menu_block").getAsJsonArray("items");
 
@@ -62,8 +63,9 @@ public class TikiService {
 	}
 
 	public List<Product> getProductList(String url) throws Exception {
-		System.out.println("[LOG] Fetching product list from: " + url);
+		System.out.println("[SERVICE] Requesting product listing from: " + url);
 		String json = sendGet(url);
+
 		List<Product> products = new ArrayList<>();
 		JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 		JsonArray data = root.getAsJsonArray("data");
@@ -73,13 +75,14 @@ public class TikiService {
 			products.add(new Product(item.get("id").getAsString(), item.get("name").getAsString(),
 					item.get("price").getAsLong(), item.get("thumbnail_url").getAsString(), false));
 		}
-		System.out.println("[INFO] Successfully retrieved " + products.size() + " products.");
+		System.out.println("[INFO] Successfully retrieved " + products.size() + " products from listing.");
 		return products;
 	}
 
 	public Product getProductDetail(String productId) throws Exception {
 		String url = "https://tiki.vn/api/v2/products/" + productId;
-		System.out.println("[LOG] Fetching product details for ID: " + productId);
+		System.out.println("[SERVICE] Fetching specific details for Product ID: " + productId);
+
 		String json = sendGet(url);
 		JsonObject item = JsonParser.parseString(json).getAsJsonObject();
 
@@ -89,7 +92,8 @@ public class TikiService {
 
 	public List<String> getProductReviews(String productId) throws Exception {
 		String url = "https://tiki.vn/api/v2/reviews?product_id=" + productId;
-		System.out.println("[LOG] Fetching reviews for product ID: " + productId);
+		System.out.println("[SERVICE] Fetching customer reviews for Product ID: " + productId);
+
 		String json = sendGet(url);
 		List<String> reviews = new ArrayList<>();
 		JsonObject root = JsonParser.parseString(json).getAsJsonObject();
@@ -102,7 +106,7 @@ public class TikiService {
 				reviews.add(content);
 			}
 		}
-		System.out.println("[INFO] Successfully retrieved " + reviews.size() + " reviews.");
+		System.out.println("[INFO] Total text reviews retrieved: " + reviews.size());
 		return reviews;
 	}
 }

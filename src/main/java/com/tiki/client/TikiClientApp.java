@@ -55,13 +55,12 @@ import com.google.gson.reflect.TypeToken;
 import com.tiki.common.Category;
 
 /**
- * Tiki Price Tracker Client Features: Hybrid Encryption, Price History Chart
- * with Tooltips, Manual Sync, Pagination, and Tracked List Management.
+ * Tiki Price Tracker Client Standardized Logging System: [SYSTEM], [NETWORK],
+ * [UI], [INFO], [ERROR]
  */
 public class TikiClientApp extends JFrame {
 	private static final long serialVersionUID = 1L;
 
-	// View Modes for logic handling
 	private enum ViewMode {
 		CATEGORY, SEARCH, TRACKED
 	}
@@ -72,14 +71,12 @@ public class TikiClientApp extends JFrame {
 	private String serverIp;
 	private int currentPage = 1;
 
-	// UI Components
 	private JPanel productPanel;
 	private JList<Category> categoryList;
 	private JTextField searchField;
 	private JLabel lblPageStatus;
 	private JScrollPane contentScroll;
 
-	// Simple memory cache for images to ensure smooth scrolling
 	private final ConcurrentHashMap<String, ImageIcon> imageCache = new ConcurrentHashMap<>();
 
 	public TikiClientApp(String host) {
@@ -95,15 +92,16 @@ public class TikiClientApp extends JFrame {
 		setSize(1280, 850);
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		setLocationRelativeTo(null);
+		System.out.println("[SYSTEM] Main frame initialized.");
 	}
 
 	private void initConnection() {
 		connection = new ClientConnection();
 		try {
 			connection.connect(serverIp, 12345);
-			System.out.println("[Network] Connected to " + serverIp);
+			System.out.println("[NETWORK] Connection established to " + serverIp + " on port 12345");
 		} catch (Exception e) {
-			System.err.println("[Critical] Connection failed: " + e.getMessage());
+			System.err.println("[CRITICAL] Failed to connect to server: " + e.getMessage());
 			JOptionPane.showMessageDialog(this, "Cannot connect to Server at " + serverIp, "Network Error",
 					JOptionPane.ERROR_MESSAGE);
 			System.exit(0);
@@ -134,7 +132,7 @@ public class TikiClientApp extends JFrame {
 
 		JButton btnTrackedView = new JButton("★ My Tracked Products");
 		btnTrackedView.setPreferredSize(new Dimension(0, 50));
-		btnTrackedView.setBackground(new Color(255, 248, 220)); // Cornsilk
+		btnTrackedView.setBackground(new Color(255, 248, 220));
 		btnTrackedView.setFont(new Font("SansSerif", Font.BOLD, 13));
 
 		JPanel sidebarPanel = new JPanel(new BorderLayout());
@@ -148,7 +146,7 @@ public class TikiClientApp extends JFrame {
 		productPanel = new JPanel(new GridLayout(0, 3, 15, 15));
 		productPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
 		contentScroll = new JScrollPane(productPanel);
-		contentScroll.getVerticalScrollBar().setUnitIncrement(25); // Smooth scrolling fix
+		contentScroll.getVerticalScrollBar().setUnitIncrement(25);
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarPanel, null);
 		splitPane.setDividerLocation(280);
@@ -172,6 +170,7 @@ public class TikiClientApp extends JFrame {
 
 		// --- EVENT LISTENERS ---
 		btnSearch.addActionListener(e -> {
+			System.out.println("[UI] User initiated search: " + searchField.getText());
 			currentViewMode = ViewMode.SEARCH;
 			currentPage = 1;
 			categoryList.clearSelection();
@@ -180,6 +179,7 @@ public class TikiClientApp extends JFrame {
 
 		categoryList.addListSelectionListener(e -> {
 			if (!e.getValueIsAdjusting() && categoryList.getSelectedValue() != null) {
+				System.out.println("[UI] Category selected: " + categoryList.getSelectedValue().getText());
 				currentViewMode = ViewMode.CATEGORY;
 				currentPage = 1;
 				searchField.setText("");
@@ -188,6 +188,7 @@ public class TikiClientApp extends JFrame {
 		});
 
 		btnTrackedView.addActionListener(e -> {
+			System.out.println("[UI] User switched to Tracked Products view.");
 			currentViewMode = ViewMode.TRACKED;
 			currentPage = 1;
 			categoryList.clearSelection();
@@ -197,14 +198,18 @@ public class TikiClientApp extends JFrame {
 
 		btnNext.addActionListener(e -> {
 			currentPage++;
+			System.out.println("[UI] Navigation: Next Page -> " + currentPage);
 			refreshList();
 		});
 		btnPrev.addActionListener(e -> {
 			if (currentPage > 1) {
 				currentPage--;
+				System.out.println("[UI] Navigation: Previous Page -> " + currentPage);
 				refreshList();
 			}
 		});
+
+		System.out.println("[SYSTEM] User Interface components ready.");
 	}
 
 	private void refreshList() {
@@ -236,21 +241,23 @@ public class TikiClientApp extends JFrame {
 			}
 
 			if (!jsonRequest.isEmpty()) {
-				System.out.println("[Request] Sending action: " + currentViewMode + " Page " + currentPage);
+				System.out.println("[NETWORK] Sending request: " + currentViewMode + " (Page " + currentPage + ")");
 				String resp = connection.sendRequest(jsonRequest);
 				JsonArray array = JsonParser.parseString(resp).getAsJsonArray();
 
 				if (array.size() == 0) {
 					productPanel.setLayout(new BorderLayout());
 					productPanel.add(new JLabel("No products found.", JLabel.CENTER));
+					System.out.println("[INFO] No data returned for the current view.");
 				} else {
 					productPanel.setLayout(new GridLayout(0, 3, 15, 15));
 					for (JsonElement el : array)
 						productPanel.add(createProductCard(el.getAsJsonObject()));
+					System.out.println("[INFO] Successfully rendered " + array.size() + " products.");
 				}
 			}
 		} catch (Exception e) {
-			System.err.println("[Error] Refresh failed: " + e.getMessage());
+			System.err.println("[ERROR] Refresh cycle failed: " + e.getMessage());
 		}
 
 		productPanel.revalidate();
@@ -260,6 +267,7 @@ public class TikiClientApp extends JFrame {
 
 	private void loadCategories() {
 		try {
+			System.out.println("[NETWORK] Requesting category menu config...");
 			String resp = connection.sendRequest("{\"action\":\"GET_CATEGORIES\"}");
 			java.lang.reflect.Type listType = new TypeToken<List<Category>>() {
 			}.getType();
@@ -270,8 +278,9 @@ public class TikiClientApp extends JFrame {
 				if (c.getId() != null)
 					model.addElement(c);
 			categoryList.setModel(model);
+			System.out.println("[INFO] Categories updated successfully.");
 		} catch (Exception e) {
-			System.err.println("[Error] Category load failed: " + e.getMessage());
+			System.err.println("[ERROR] Failed to load categories: " + e.getMessage());
 		}
 	}
 
@@ -281,7 +290,6 @@ public class TikiClientApp extends JFrame {
 		card.setBackground(Color.WHITE);
 		card.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-		// 1. Image handling with Cache & Threading
 		JLabel imgLabel = new JLabel(" ", JLabel.CENTER);
 		imgLabel.setPreferredSize(new Dimension(180, 180));
 		String imgUrl = product.has("thumbnail_url") ? product.get("thumbnail_url").getAsString() : "";
@@ -301,14 +309,13 @@ public class TikiClientApp extends JFrame {
 						imageCache.put(imgUrl, icon);
 						SwingUtilities.invokeLater(() -> imgLabel.setIcon(icon));
 					} catch (Exception e) {
-						imgLabel.setText("No Image");
+						SwingUtilities.invokeLater(() -> imgLabel.setText("No Image"));
 					}
 				}).start();
 			}
 		}
 		card.add(imgLabel, BorderLayout.CENTER);
 
-		// 2. Tracking Badge
 		if (product.has("isTracked") && product.get("isTracked").getAsBoolean()) {
 			JLabel badge = new JLabel(" ★ TRACKING ", JLabel.CENTER);
 			badge.setOpaque(true);
@@ -322,7 +329,6 @@ public class TikiClientApp extends JFrame {
 			card.add(spacer, BorderLayout.NORTH);
 		}
 
-		// 3. Information (Name & Price)
 		JPanel info = new JPanel(new GridLayout(2, 1, 5, 5));
 		info.setBackground(Color.WHITE);
 		info.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -361,11 +367,15 @@ public class TikiClientApp extends JFrame {
 
 	private void showProductDetail(JsonObject productObj) {
 		String productId = productObj.get("id").getAsString();
+		System.out.println("[UI] Opening detail dialog for Product ID: " + productId);
+
 		JDialog detailDlg = new JDialog(this, "Product Detail: " + productId, true);
 		detailDlg.setSize(1000, 750);
+		detailDlg.setLayout(new BorderLayout());
 		detailDlg.setLocationRelativeTo(this);
 
 		try {
+			System.out.println("[NETWORK] Fetching full details for ID: " + productId);
 			String resp = connection.sendRequest("{\"action\":\"GET_DETAIL\", \"productId\":\"" + productId + "\"}");
 			JsonObject data = JsonParser.parseString(resp).getAsJsonObject();
 
@@ -373,7 +383,6 @@ public class TikiClientApp extends JFrame {
 			JsonArray historyArr = data.getAsJsonArray("history");
 			JsonArray reviewsArr = data.getAsJsonArray("reviews");
 
-			// --- NORTH: Control Header ---
 			JPanel header = new JPanel(new BorderLayout());
 			header.setBorder(new EmptyBorder(10, 15, 10, 15));
 			JCheckBox chkTrack = new JCheckBox("Enable Price Tracking (Auto-sync every 3 hours)", isTracked);
@@ -381,23 +390,19 @@ public class TikiClientApp extends JFrame {
 			header.add(chkTrack, BorderLayout.WEST);
 			detailDlg.add(header, BorderLayout.NORTH);
 
-			// --- CENTER: Chart with Tooltips ---
 			JPanel centerPanel = new JPanel(new BorderLayout());
 			if (isTracked && historyArr.size() > 0) {
 				DefaultCategoryDataset dataset = new DefaultCategoryDataset();
 				for (JsonElement e : historyArr) {
 					JsonObject h = e.getAsJsonObject();
 					String time = h.get("key").getAsString();
-					// Label for X-Axis: MM-dd HH:mm
 					String axisLabel = time.substring(5, 16);
 					dataset.addValue(h.get("value").getAsLong(), "Price", axisLabel);
 				}
 
-				// Create Chart with Tooltips enabled (true as second to last param)
 				JFreeChart chart = ChartFactory.createLineChart("Price Variation History", "Timestamp", "Price (VND)",
 						dataset, org.jfree.chart.plot.PlotOrientation.VERTICAL, true, true, false);
 
-				// Customize Tooltips
 				CategoryPlot plot = chart.getCategoryPlot();
 				LineAndShapeRenderer renderer = new LineAndShapeRenderer();
 				renderer.setDefaultShapesVisible(true);
@@ -406,6 +411,7 @@ public class TikiClientApp extends JFrame {
 				plot.setRenderer(renderer);
 
 				centerPanel.add(new ChartPanel(chart), BorderLayout.CENTER);
+				System.out.println("[INFO] Price history chart rendered with tooltips.");
 			} else {
 				centerPanel.add(new JLabel(
 						"<html><center><font size='5'>No price data yet.</font><br>Enable tracking and wait for the next system update.</center></html>",
@@ -413,7 +419,6 @@ public class TikiClientApp extends JFrame {
 			}
 			detailDlg.add(centerPanel, BorderLayout.CENTER);
 
-			// --- SOUTH: Reviews Section ---
 			StringBuilder sb = new StringBuilder("CUSTOMER REVIEWS (TEXT ONLY):\n\n");
 			if (reviewsArr.size() == 0)
 				sb.append("No reviews found for this product.");
@@ -430,10 +435,10 @@ public class TikiClientApp extends JFrame {
 			reviewScroll.setBorder(BorderFactory.createTitledBorder("Reviews"));
 			detailDlg.add(reviewScroll, BorderLayout.SOUTH);
 
-			// Checkbox logic
 			chkTrack.addActionListener(e -> {
 				try {
 					boolean selected = chkTrack.isSelected();
+					System.out.println("[NETWORK] Toggling track status to: " + selected);
 					connection.sendRequest("{\"action\":\"TOGGLE_TRACK\", \"productId\":\"" + productId
 							+ "\", \"isTracked\":" + selected + "}");
 					productObj.addProperty("isTracked", selected);
@@ -442,19 +447,18 @@ public class TikiClientApp extends JFrame {
 						JOptionPane.showMessageDialog(detailDlg,
 								"Success! We will now record price changes for this item.");
 				} catch (Exception ex) {
-					System.err.println("[Error] Toggle failed.");
+					System.err.println("[ERROR] Failed to toggle tracking: " + ex.getMessage());
 				}
 			});
 
 		} catch (Exception e) {
-			System.err.println("[Error] Detail fetch failed.");
+			System.err.println("[ERROR] Detail fetch failed: " + e.getMessage());
 		}
 
 		detailDlg.setVisible(true);
 	}
 
 	public static void main(String[] args) {
-		// Performance & UI Optimization
 		System.setProperty("awt.useSystemAAFontSettings", "on");
 		System.setProperty("swing.aatext", "true");
 		System.setProperty("flatlaf.uiScale", "1.1");
@@ -462,8 +466,9 @@ public class TikiClientApp extends JFrame {
 
 		try {
 			UIManager.setLookAndFeel(new FlatLightLaf());
+			System.out.println("[SYSTEM] FlatLaf Light Look & Feel applied.");
 		} catch (Exception ex) {
-			System.err.println("[System] FlatLaf failed to initialize.");
+			System.err.println("[ERROR] FlatLaf failed to initialize.");
 		}
 
 		String host = (args.length > 0) ? args[0] : "localhost";

@@ -37,6 +37,7 @@ public class ClientHandler implements Runnable {
 		try (DataInputStream in = new DataInputStream(socket.getInputStream());
 				DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
+			// --- SECURITY HANDSHAKE ---
 			byte[] pubKeyBytes = serverKeyPair.getPublic().getEncoded();
 			out.writeInt(pubKeyBytes.length);
 			out.write(pubKeyBytes);
@@ -48,15 +49,16 @@ public class ClientHandler implements Runnable {
 			byte[] aesKeyBytes = CryptoUtils.decryptRSA(encKeyBytes, serverKeyPair.getPrivate());
 			this.sessionKey = new SecretKeySpec(aesKeyBytes, "AES");
 
-			System.out.println("[INFO] Secure handshake completed with: " + socket.getRemoteSocketAddress());
+			System.out.println("[SECURITY] Hybrid handshake successful with: " + socket.getRemoteSocketAddress());
 
+			// --- REQUEST PROCESSING LOOP ---
 			while (true) {
 				String encryptedReq = in.readUTF();
 				String jsonReq = CryptoUtils.decryptAES(encryptedReq, sessionKey);
 				JsonObject request = JsonParser.parseString(jsonReq).getAsJsonObject();
 
 				String action = request.get("action").getAsString();
-				System.out.println("[LOG] Request received: " + action + " from " + socket.getRemoteSocketAddress());
+				System.out.println("[REQUEST] Action: " + action + " | From: " + socket.getRemoteSocketAddress());
 
 				String responseJson = "";
 
@@ -75,31 +77,30 @@ public class ClientHandler implements Runnable {
 					responseJson = gson.toJson(products);
 					break;
 
-//				case "GET_TRACKED_LIST":
-//					List<Product> trackedList = dbManager.getTrackedProducts();
-//					responseJson = gson.toJson(trackedList);
-//					break;
-				
 				case "GET_TRACKED_LIST":
-				    int trackedPage = request.has("page") ? request.get("page").getAsInt() : 1;
-				    int limitPerRequest = request.has("limit") ? request.get("limit").getAsInt() : 50;
-				    List<Product> trackedList = dbManager.getTrackedProducts(trackedPage, limitPerRequest);
-				    responseJson = gson.toJson(trackedList);
-				    break;
+					int trackedPage = request.has("page") ? request.get("page").getAsInt() : 1;
+					int limitPerRequest = request.has("limit") ? request.get("limit").getAsInt() : 50;
+					System.out.println("[REQUEST] [LOG] Fetching tracked products | Page: " + trackedPage + " | Limit: "
+							+ limitPerRequest);
+
+					List<Product> trackedList = dbManager.getTrackedProducts(trackedPage, limitPerRequest);
+					responseJson = gson.toJson(trackedList);
+					break;
 
 				case "TOGGLE_TRACK":
 					String pId = request.get("productId").getAsString();
 					boolean shouldTrack = request.get("isTracked").getAsBoolean();
 
 					if (shouldTrack) {
+						// Sync from Tiki and save to local DB
 						Product pDetail = tikiService.getProductDetail(pId);
 						dbManager.saveProduct(pDetail);
 						dbManager.updateTracking(pId, true);
 						dbManager.addPriceHistory(pId, pDetail.getPrice());
-						System.out.println("[INFO] Started tracking product ID: " + pId);
+						System.out.println("[DATABASE] Tracking ENABLED for ID: " + pId);
 					} else {
 						dbManager.updateTracking(pId, false);
-						System.out.println("[INFO] Stopped tracking product ID: " + pId);
+						System.out.println("[DATABASE] Tracking DISABLED for ID: " + pId);
 					}
 					responseJson = "{\"status\":\"success\"}";
 					break;
@@ -122,11 +123,12 @@ public class ClientHandler implements Runnable {
 					break;
 				}
 
+				// Encrypt and send back the response
 				out.writeUTF(CryptoUtils.encryptAES(responseJson, sessionKey));
 				out.flush();
 			}
 		} catch (Exception e) {
-			System.out.println("[INFO] Client disconnected: " + socket.getRemoteSocketAddress());
+			System.out.println("[NETWORK] Client disconnected: " + socket.getRemoteSocketAddress());
 		}
 	}
 }
