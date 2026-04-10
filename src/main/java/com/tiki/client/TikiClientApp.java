@@ -435,13 +435,12 @@ public class TikiClientApp extends JFrame {
 			chkTrack.addActionListener(e -> {
 				try {
 					boolean selected = chkTrack.isSelected();
-					connection.sendRequest("{\"action\":\"TOGGLE_TRACK\", \"productId\":\"" + productId
-							+ "\", \"isTracked\":" + selected + "}");
 
-					// Cập nhật local storage
-					if (selected)
+					if (selected) {
+						connection.sendRequest("{\"action\":\"TOGGLE_TRACK\", \"productId\":\"" + productId
+								+ "\", \"isTracked\":" + selected + "}");
 						myLocalTrackedIds.add(productId);
-					else
+					} else
 						myLocalTrackedIds.remove(productId);
 					saveLocalTrackingData();
 
@@ -484,12 +483,12 @@ public class TikiClientApp extends JFrame {
 	}
 
 	public static boolean isValidHost(String host) {
-	    try {
-	        java.net.InetAddress.getByName(host);
-	        return true;
-	    } catch (java.net.UnknownHostException e) {
-	        return false;
-	    }
+		try {
+			java.net.InetAddress.getByName(host);
+			return true;
+		} catch (java.net.UnknownHostException e) {
+			return false;
+		}
 	}
 
 }
