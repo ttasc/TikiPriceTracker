@@ -1,0 +1,45 @@
+name: Daily Tiki Price Crawl
+
+on:
+  schedule:
+    # Chạy vào 23:00 UTC mỗi ngày (tương đương 06:00 sáng giờ Việt Nam)
+    - cron: '0 23 * * *'
+  workflow_dispatch: # Cho phép chạy thủ công bất cứ lúc nào
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+
+    # Cấp quyền ghi để push database mới lên repo
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Run Crawler
+        # Chuyển vào thư mục bin để chạy JAR, giúp nó nhận đúng file DB và JSON local
+        working-directory: bin
+        run: |
+          java -jar TikiTracker-Crawler.jar
+
+      - name: Commit and Push Database
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add bin/tiki_tracker.db
+
+          # Kiểm tra xem có thay đổi không trước khi commit
+          if git diff --staged --quiet; then
+            echo "No changes in database. Skipping commit."
+          else
+            git commit -m "Automated price update: $(date)"
+            git push
+          fi
