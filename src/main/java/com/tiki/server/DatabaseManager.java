@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import com.tiki.common.Pair;
@@ -139,6 +140,29 @@ public class DatabaseManager {
 			System.err.println("[ERROR] Failed to fetch last price for " + productId + ": " + e.getMessage());
 		}
 		return -1;
+	}
+
+	public List<Product> getProductsByIds(List<String> ids) {
+	    List<Product> list = new ArrayList<>();
+	    if (ids.isEmpty()) return list;
+	    
+	    String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+	    String sql = "SELECT p.*, "
+	               + "(SELECT price FROM price_history WHERE product_id = p.id ORDER BY timestamp DESC LIMIT 1) as current_price "
+	               + "FROM products p WHERE p.id IN (" + placeholders + ")";
+
+	    try (Connection conn = DriverManager.getConnection(URL); 
+	         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+	        for (int i = 0; i < ids.size(); i++) {
+	            pstmt.setString(i + 1, ids.get(i));
+	        }
+	        ResultSet rs = pstmt.executeQuery();
+	        while (rs.next()) {
+	            list.add(new Product(rs.getString("id"), rs.getString("name"), rs.getLong("current_price"),
+	                    rs.getString("thumbnail"), true));
+	        }
+	    } catch (SQLException e) { System.err.println("[ERROR] Get products by IDs failed: " + e.getMessage()); }
+	    return list;
 	}
 
 	public boolean isProductTracked(String productId) {

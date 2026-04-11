@@ -4,12 +4,15 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;
 import java.security.KeyPair;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.tiki.common.Category;
@@ -86,6 +89,15 @@ public class ClientHandler implements Runnable {
 					List<Product> trackedList = dbManager.getTrackedProducts(trackedPage, limitPerRequest);
 					responseJson = gson.toJson(trackedList);
 					break;
+
+				case "GET_BY_IDS":
+				    JsonArray idArray = request.getAsJsonArray("ids");
+				    List<String> idList = new ArrayList<>();
+				    for (JsonElement e : idArray) idList.add(e.getAsString());
+				    
+				    List<Product> result = dbManager.getProductsByIds(idList);
+				    responseJson = gson.toJson(result);
+				    break;
 
 				case "TOGGLE_TRACK":
 					String pId = request.get("productId").getAsString();

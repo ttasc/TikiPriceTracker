@@ -1,13 +1,6 @@
 package com.tiki.client;
 
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import java.awt.GridLayout;
-import java.awt.Image;
+import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -18,29 +11,11 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashSet;
+import java.util.*;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.swing.BorderFactory;
-import javax.swing.DefaultListModel;
-import javax.swing.ImageIcon;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
+import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
 import org.jfree.chart.ChartFactory;
@@ -52,22 +27,19 @@ import org.jfree.chart.renderer.category.LineAndShapeRenderer;
 import org.jfree.data.category.DefaultCategoryDataset;
 
 import com.formdev.flatlaf.FlatLightLaf;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import com.tiki.common.Category;
 
 public class TikiClientApp extends JFrame {
+
+	public static final int PORT = 30000;
+
 	private static final long serialVersionUID = 1L;
 	private static final String LOCAL_TRACK_FILE = "my_tracked_ids.json";
+	private static final int ITEMS_PER_PAGE = 50;
 
-	private enum ViewMode {
-		CATEGORY, SEARCH, TRACKED
-	}
-
+	private enum ViewMode { CATEGORY, SEARCH, TRACKED }
 	private ViewMode currentViewMode = ViewMode.CATEGORY;
 
 	private ClientConnection connection;
@@ -81,15 +53,25 @@ public class TikiClientApp extends JFrame {
 	private JLabel lblPageStatus;
 	private JScrollPane contentScroll;
 
-	// Lưu trữ ID sản phẩm mà máy khách này thực sự theo dõi
 	private Set<String> myLocalTrackedIds = new HashSet<>();
 	private final ConcurrentHashMap<String, ImageIcon> imageCache = new ConcurrentHashMap<>();
+	private final Gson gson = new Gson();
 
 	public TikiClientApp(String host, boolean adminMode) {
-		this.serverIp = host;
+	    if (host == null || host.equalsIgnoreCase("auto") || host.isEmpty()) {
+	        this.serverIp = ClientConnection.discoverServerIp();
+	    } else {
+	        this.serverIp = host;
+	    }
+
+	    if (this.serverIp == null) {
+	        JOptionPane.showMessageDialog(null, "Could not find Server!");
+	        System.exit(0);
+	    }
+
 		this.isAdminMode = adminMode;
 
-		loadLocalTrackingData(); // Tải dữ liệu ID từ file local
+		loadLocalTrackingData();
 		setupBaseFrame();
 		initConnection();
 		setupUI();
@@ -97,46 +79,39 @@ public class TikiClientApp extends JFrame {
 	}
 
 	private void setupBaseFrame() {
-		setTitle("Tiki Price Tracker | Server: " + serverIp);
+		String modeText = isAdminMode ? " [ADMIN - SHOWING GLOBAL]" : " [USER - SHOWING PERSONAL]";
+		setTitle("Tiki Tracker | Server: " + serverIp + modeText);
 		setSize(1280, 850);
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		setLocationRelativeTo(null);
-		System.out.println("[SYSTEM] Mode: " + (isAdminMode ? "ADMIN" : "USER"));
 	}
 
-	// --- LOCAL DATA PERSISTENCE ---
 	private void loadLocalTrackingData() {
 		try {
 			Path path = Paths.get(LOCAL_TRACK_FILE);
 			if (Files.exists(path)) {
 				String content = Files.readString(path);
-				String[] ids = new Gson().fromJson(content, String[].class);
-				myLocalTrackedIds.addAll(Arrays.asList(ids));
-				System.out.println("[SYSTEM] Loaded " + myLocalTrackedIds.size() + " local tracked IDs.");
+				String[] ids = gson.fromJson(content, String[].class);
+				if (ids != null) Collections.addAll(myLocalTrackedIds, ids);
+				System.out.println("[SYSTEM] Loaded " + myLocalTrackedIds.size() + " personal tracked IDs.");
 			}
-		} catch (Exception e) {
-			System.err.println("[SYSTEM] Could not load local tracking file.");
-		}
+		} catch (Exception e) { System.err.println("[SYSTEM] Local tracking file not found or corrupted."); }
 	}
 
 	private void saveLocalTrackingData() {
 		try {
-			String json = new Gson().toJson(myLocalTrackedIds);
+			String json = gson.toJson(myLocalTrackedIds);
 			Files.writeString(Paths.get(LOCAL_TRACK_FILE), json);
-			System.out.println("[SYSTEM] Local tracking data saved.");
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		} catch (IOException e) { e.printStackTrace(); }
 	}
 
 	private void initConnection() {
 		connection = new ClientConnection();
 		try {
-			connection.connect(serverIp, 12345);
-			System.out.println("[NETWORK] Connected to " + serverIp);
+			connection.connect(serverIp, PORT);
+			System.out.println("[NETWORK] Connection established.");
 		} catch (Exception e) {
-			System.err.println("[CRITICAL] Connection failed: " + e.getMessage());
-			JOptionPane.showMessageDialog(this, "Cannot connect to Server", "Error", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(this, "Server connection failed!", "Error", JOptionPane.ERROR_MESSAGE);
 			System.exit(0);
 		}
 	}
@@ -144,7 +119,7 @@ public class TikiClientApp extends JFrame {
 	private void setupUI() {
 		setLayout(new BorderLayout());
 
-		// TOP PANEL
+		// TOP: Search
 		JPanel topPanel = new JPanel(new BorderLayout(15, 0));
 		topPanel.setBorder(new EmptyBorder(15, 15, 15, 15));
 		searchField = new JTextField();
@@ -159,7 +134,7 @@ public class TikiClientApp extends JFrame {
 		categoryList.setFixedCellHeight(35);
 		JScrollPane sidebarScroll = new JScrollPane(categoryList);
 
-		JButton btnTrackedView = new JButton(isAdminMode ? "★ ALL TRACKED" : "★ MY TRACKED PRODUCTS");
+		JButton btnTrackedView = new JButton(isAdminMode ? "★ GLOBAL TRACKED" : "★ MY TRACKED PRODUCTS");
 		btnTrackedView.setPreferredSize(new Dimension(0, 50));
 		btnTrackedView.setBackground(isAdminMode ? new Color(255, 204, 204) : new Color(220, 255, 220));
 		btnTrackedView.setFont(new Font("SansSerif", Font.BOLD, 13));
@@ -174,7 +149,7 @@ public class TikiClientApp extends JFrame {
 		// CENTER
 		productPanel = new JPanel(new GridLayout(0, 3, 15, 15));
 		contentScroll = new JScrollPane(productPanel);
-		contentScroll.getVerticalScrollBar().setUnitIncrement(25);
+		contentScroll.getVerticalScrollBar().setUnitIncrement(30);
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebarPanel, null);
 		splitPane.setDividerLocation(280);
@@ -194,34 +169,16 @@ public class TikiClientApp extends JFrame {
 		centerContainer.add(paginationPanel, BorderLayout.SOUTH);
 		splitPane.setRightComponent(centerContainer);
 
-		// EVENTS
-		btnSearch.addActionListener(e -> {
-			currentViewMode = ViewMode.SEARCH;
-			currentPage = 1;
-			refreshList();
-		});
+		// LISTENERS
+		btnSearch.addActionListener(e -> { currentViewMode = ViewMode.SEARCH; currentPage = 1; refreshList(); });
 		categoryList.addListSelectionListener(e -> {
 			if (!e.getValueIsAdjusting() && categoryList.getSelectedValue() != null) {
-				currentViewMode = ViewMode.CATEGORY;
-				currentPage = 1;
-				refreshList();
+				currentViewMode = ViewMode.CATEGORY; currentPage = 1; refreshList();
 			}
 		});
-		btnTrackedView.addActionListener(e -> {
-			currentViewMode = ViewMode.TRACKED;
-			currentPage = 1;
-			refreshList();
-		});
-		btnNext.addActionListener(e -> {
-			currentPage++;
-			refreshList();
-		});
-		btnPrev.addActionListener(e -> {
-			if (currentPage > 1) {
-				currentPage--;
-				refreshList();
-			}
-		});
+		btnTrackedView.addActionListener(e -> { currentViewMode = ViewMode.TRACKED; currentPage = 1; refreshList(); });
+		btnNext.addActionListener(e -> { currentPage++; refreshList(); });
+		btnPrev.addActionListener(e -> { if (currentPage > 1) { currentPage--; refreshList(); } });
 	}
 
 	private void refreshList() {
@@ -230,86 +187,84 @@ public class TikiClientApp extends JFrame {
 		String jsonRequest = "";
 
 		try {
+			if (currentViewMode == ViewMode.TRACKED && !isAdminMode) {
+				fetchPersonalTrackedItems();
+				return;
+			}
+
 			switch (currentViewMode) {
-			case CATEGORY:
-				Category selected = categoryList.getSelectedValue();
-				if (selected != null) {
-					String url = "https://tiki.vn/api/personalish/v1/blocks/listings?category=" + selected.getId()
-							+ "&page=" + currentPage;
-					jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
-				}
-				break;
-			case SEARCH:
-				String q = searchField.getText().trim();
-				if (!q.isEmpty()) {
-					String url = "https://tiki.vn/api/v2/products?limit=40&q=" + q.replace(" ", "+") + "&page="
-							+ currentPage;
-					jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
-				}
-				break;
-			case TRACKED:
-				// Admin Mode: 50 items/page. User Mode: Fetch more to filter.
-				int limit = isAdminMode ? 50 : 200;
-				jsonRequest = "{\"action\":\"GET_TRACKED_LIST\", \"page\":" + currentPage + ", \"limit\":" + limit
-						+ "}";
-				break;
+				case CATEGORY:
+					Category selected = categoryList.getSelectedValue();
+					if (selected != null) {
+						String url = "https://tiki.vn/api/personalish/v1/blocks/listings?category=" + selected.getId() + "&page=" + currentPage;
+						jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
+					}
+					break;
+				case SEARCH:
+					String q = searchField.getText().trim();
+					if (!q.isEmpty()) {
+						String url = "https://tiki.vn/api/v2/products?limit=40&q=" + q.replace(" ", "+") + "&page=" + currentPage;
+						jsonRequest = "{\"action\":\"GET_PRODUCTS\", \"url\":\"" + url + "\"}";
+					}
+					break;
+				case TRACKED:
+					jsonRequest = "{\"action\":\"GET_TRACKED_LIST\", \"page\":" + currentPage + ", \"limit\":50}";
+					break;
 			}
 
 			if (!jsonRequest.isEmpty()) {
 				String resp = connection.sendRequest(jsonRequest);
-				JsonArray array = JsonParser.parseString(resp).getAsJsonArray();
-
-				productPanel.setLayout(new GridLayout(0, 3, 15, 15));
-				int displayedCount = 0;
-
-				for (JsonElement el : array) {
-					JsonObject obj = el.getAsJsonObject();
-					String id = obj.get("id").getAsString();
-
-					// --- LOGIC LỌC DỮ LIỆU ---
-					if (currentViewMode == ViewMode.TRACKED && !isAdminMode) {
-						if (!myLocalTrackedIds.contains(id))
-							continue;
-					}
-
-					// Ghi đè thuộc tính isTracked dựa trên local data (cho User Mode)
-					if (!isAdminMode) {
-						obj.addProperty("isTracked", myLocalTrackedIds.contains(id));
-					}
-
-					productPanel.add(createProductCard(obj));
-					displayedCount++;
-				}
-
-				if (displayedCount == 0) {
-					productPanel.setLayout(new BorderLayout());
-					productPanel.add(new JLabel("No products to display in this view.", JLabel.CENTER));
-				}
-				System.out.println("[INFO] Displayed " + displayedCount + " items.");
+				renderProducts(resp);
 			}
-		} catch (Exception e) {
-			System.err.println("[ERROR] Refresh failed: " + e.getMessage());
-		}
+		} catch (Exception e) { System.err.println("[ERROR] Refresh failed: " + e.getMessage()); }
 
 		productPanel.revalidate();
 		productPanel.repaint();
 		contentScroll.getVerticalScrollBar().setValue(0);
 	}
 
+	private void fetchPersonalTrackedItems() throws Exception {
+		List<String> allIds = new ArrayList<>(myLocalTrackedIds);
+		Collections.sort(allIds);
+
+		int from = (currentPage - 1) * ITEMS_PER_PAGE;
+		int to = Math.min(from + ITEMS_PER_PAGE, allIds.size());
+
+		if (from >= allIds.size() || allIds.isEmpty()) {
+			productPanel.setLayout(new BorderLayout());
+			productPanel.add(new JLabel("No tracked products found on this page.", JLabel.CENTER));
+		} else {
+			List<String> pageIds = allIds.subList(from, to);
+			JsonObject req = new JsonObject();
+			req.addProperty("action", "GET_BY_IDS");
+			req.add("ids", gson.toJsonTree(pageIds));
+
+			String resp = connection.sendRequest(gson.toJson(req));
+			renderProducts(resp);
+		}
+	}
+
+	private void renderProducts(String jsonResp) {
+		JsonArray array = JsonParser.parseString(jsonResp).getAsJsonArray();
+		productPanel.setLayout(new GridLayout(0, 3, 15, 15));
+		for (JsonElement el : array) {
+			JsonObject obj = el.getAsJsonObject();
+			if (!isAdminMode) {
+				obj.addProperty("isTracked", myLocalTrackedIds.contains(obj.get("id").getAsString()));
+			}
+			productPanel.add(createProductCard(obj));
+		}
+	}
+
 	private void loadCategories() {
 		try {
 			String resp = connection.sendRequest("{\"action\":\"GET_CATEGORIES\"}");
-			java.lang.reflect.Type listType = new TypeToken<List<Category>>() {
-			}.getType();
-			List<Category> categories = new Gson().fromJson(resp, listType);
+			java.lang.reflect.Type listType = new TypeToken<List<Category>>() {}.getType();
+			List<Category> categories = gson.fromJson(resp, listType);
 			DefaultListModel<Category> model = new DefaultListModel<>();
-			for (Category c : categories)
-				if (c.getId() != null)
-					model.addElement(c);
+			for (Category c : categories) if (c.getId() != null) model.addElement(c);
 			categoryList.setModel(model);
-		} catch (Exception e) {
-			System.err.println("[ERROR] Category load failed.");
-		}
+		} catch (Exception e) { System.err.println("[ERROR] Category load failed."); }
 	}
 
 	private JPanel createProductCard(JsonObject product) {
@@ -318,44 +273,37 @@ public class TikiClientApp extends JFrame {
 		card.setBackground(Color.WHITE);
 		card.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-		// Image
+		// Image with Cache
 		JLabel imgLabel = new JLabel(" ", JLabel.CENTER);
 		imgLabel.setPreferredSize(new Dimension(180, 180));
 		String imgUrl = product.has("thumbnail_url") ? product.get("thumbnail_url").getAsString() : "";
+
 		if (!imgUrl.isEmpty()) {
-			if (imageCache.containsKey(imgUrl))
-				imgLabel.setIcon(imageCache.get(imgUrl));
+			if (imageCache.containsKey(imgUrl)) imgLabel.setIcon(imageCache.get(imgUrl));
 			else {
 				new Thread(() -> {
 					try {
 						HttpClient client = HttpClient.newHttpClient();
-						HttpRequest req = HttpRequest.newBuilder().uri(URI.create(imgUrl))
-								.header("User-Agent", "Mozilla/5.0").build();
+						HttpRequest req = HttpRequest.newBuilder().uri(URI.create(imgUrl)).header("User-Agent", "Mozilla/5.0").build();
 						byte[] data = client.send(req, HttpResponse.BodyHandlers.ofByteArray()).body();
-						ImageIcon icon = new ImageIcon(
-								new ImageIcon(data).getImage().getScaledInstance(160, 160, Image.SCALE_SMOOTH));
+						ImageIcon icon = new ImageIcon(new ImageIcon(data).getImage().getScaledInstance(160, 160, Image.SCALE_SMOOTH));
 						imageCache.put(imgUrl, icon);
 						SwingUtilities.invokeLater(() -> imgLabel.setIcon(icon));
-					} catch (Exception e) {
-						imgLabel.setText("No Image");
-					}
+					} catch (Exception e) { imgLabel.setText("No Image"); }
 				}).start();
 			}
 		}
 		card.add(imgLabel, BorderLayout.CENTER);
 
-		// Badge (Dựa trên local IDs trong User Mode, hoặc server state trong Admin
-		// Mode)
-		boolean isTracked = product.has("isTracked") && product.get("isTracked").getAsBoolean();
-		if (isTracked) {
+		// Tracking Badge
+		if (product.has("isTracked") && product.get("isTracked").getAsBoolean()) {
 			JLabel badge = new JLabel(" ★ TRACKING ", JLabel.CENTER);
 			badge.setOpaque(true);
 			badge.setBackground(new Color(255, 215, 0));
 			badge.setFont(new Font("SansSerif", Font.BOLD, 10));
 			card.add(badge, BorderLayout.NORTH);
 		} else {
-			JPanel spacer = new JPanel();
-			spacer.setBackground(Color.WHITE);
+			JPanel spacer = new JPanel(); spacer.setBackground(Color.WHITE);
 			spacer.setPreferredSize(new Dimension(0, 20));
 			card.add(spacer, BorderLayout.NORTH);
 		}
@@ -364,8 +312,7 @@ public class TikiClientApp extends JFrame {
 		JPanel info = new JPanel(new GridLayout(2, 1, 5, 5));
 		info.setBackground(Color.WHITE);
 		info.setBorder(new EmptyBorder(10, 10, 10, 10));
-		info.add(
-				new JLabel("<html><body style='width: 150px'>" + product.get("name").getAsString() + "</body></html>"));
+		info.add(new JLabel("<html><body style='width: 150px'>" + product.get("name").getAsString() + "</body></html>"));
 		JLabel lblPrice = new JLabel(String.format("%,d VND", product.get("price").getAsLong()));
 		lblPrice.setForeground(new Color(204, 0, 0));
 		lblPrice.setFont(new Font("SansSerif", Font.BOLD, 14));
@@ -374,16 +321,14 @@ public class TikiClientApp extends JFrame {
 
 		card.addMouseListener(new MouseAdapter() {
 			@Override
-			public void mouseClicked(MouseEvent e) {
-				showProductDetail(product);
-			}
+			public void mouseClicked(MouseEvent e) { showProductDetail(product); }
 		});
 		return card;
 	}
 
 	private void showProductDetail(JsonObject productObj) {
 		String productId = productObj.get("id").getAsString();
-		JDialog detailDlg = new JDialog(this, "Product Detail", true);
+		JDialog detailDlg = new JDialog(this, "Product Detail: " + productId, true);
 		detailDlg.setSize(1000, 750);
 		detailDlg.setLocationRelativeTo(this);
 
@@ -391,9 +336,7 @@ public class TikiClientApp extends JFrame {
 			String resp = connection.sendRequest("{\"action\":\"GET_DETAIL\", \"productId\":\"" + productId + "\"}");
 			JsonObject data = JsonParser.parseString(resp).getAsJsonObject();
 
-			// Override isTracked bằng dữ liệu local nếu không phải Admin
-			boolean isTracked = isAdminMode ? data.get("isTracked").getAsBoolean()
-					: myLocalTrackedIds.contains(productId);
+			boolean isTracked = isAdminMode ? data.get("isTracked").getAsBoolean() : myLocalTrackedIds.contains(productId);
 			JsonArray historyArr = data.getAsJsonArray("history");
 			JsonArray reviewsArr = data.getAsJsonArray("reviews");
 
@@ -402,58 +345,41 @@ public class TikiClientApp extends JFrame {
 			detailDlg.add(chkTrack, BorderLayout.NORTH);
 
 			JPanel centerPanel = new JPanel(new BorderLayout());
-			// Hiển thị biểu đồ cho bất kỳ ai có dữ liệu (Admin thấy hết, User thấy của
-			// mình)
 			if (historyArr.size() > 0 && (isAdminMode || isTracked)) {
 				DefaultCategoryDataset dataset = new DefaultCategoryDataset();
 				for (JsonElement e : historyArr) {
 					JsonObject h = e.getAsJsonObject();
 					dataset.addValue(h.get("value").getAsLong(), "Price", h.get("key").getAsString().substring(5, 16));
 				}
-				JFreeChart chart = ChartFactory.createLineChart("Price History", "Time", "VND", dataset,
-						org.jfree.chart.plot.PlotOrientation.VERTICAL, true, true, false);
+				JFreeChart chart = ChartFactory.createLineChart("Price History", "Time", "VND", dataset, org.jfree.chart.plot.PlotOrientation.VERTICAL, true, true, false);
 				CategoryPlot plot = chart.getCategoryPlot();
 				LineAndShapeRenderer renderer = new LineAndShapeRenderer();
-				renderer.setDefaultToolTipGenerator(new StandardCategoryToolTipGenerator("Time: {1} | Price: {2} VND",
-						java.text.NumberFormat.getIntegerInstance()));
+				renderer.setDefaultToolTipGenerator(new StandardCategoryToolTipGenerator("Time: {1} | Price: {2} VND", java.text.NumberFormat.getIntegerInstance()));
 				plot.setRenderer(renderer);
 				centerPanel.add(new ChartPanel(chart), BorderLayout.CENTER);
 			} else {
-				centerPanel
-						.add(new JLabel("<html><center>No price history recorded yet.</center></html>", JLabel.CENTER));
+				centerPanel.add(new JLabel("<html><center>No price history recorded yet.</center></html>", JLabel.CENTER));
 			}
 			detailDlg.add(centerPanel, BorderLayout.CENTER);
 
-			// Reviews...
 			JTextArea txtReviews = new JTextArea(10, 0);
-			for (JsonElement e : reviewsArr)
-				txtReviews.append("● " + e.getAsString() + "\n\n");
-			txtReviews.setEditable(false);
-			txtReviews.setLineWrap(true);
+			for (JsonElement e : reviewsArr) txtReviews.append("● " + e.getAsString() + "\n\n");
+			txtReviews.setLineWrap(true); txtReviews.setWrapStyleWord(true);
 			detailDlg.add(new JScrollPane(txtReviews), BorderLayout.SOUTH);
 
 			chkTrack.addActionListener(e -> {
 				try {
 					boolean selected = chkTrack.isSelected();
-
-					if (selected) {
-						connection.sendRequest("{\"action\":\"TOGGLE_TRACK\", \"productId\":\"" + productId
-								+ "\", \"isTracked\":" + selected + "}");
-						myLocalTrackedIds.add(productId);
-					} else
-						myLocalTrackedIds.remove(productId);
+					connection.sendRequest("{\"action\":\"TOGGLE_TRACK\", \"productId\":\"" + productId + "\", \"isTracked\":" + selected + "}");
+					if (selected) myLocalTrackedIds.add(productId);
+					else myLocalTrackedIds.remove(productId);
 					saveLocalTrackingData();
-
 					productObj.addProperty("isTracked", selected);
 					refreshList();
-				} catch (Exception ex) {
-					ex.printStackTrace();
-				}
+				} catch (Exception ex) { ex.printStackTrace(); }
 			});
 
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+		} catch (Exception e) { e.printStackTrace(); }
 		detailDlg.setVisible(true);
 	}
 
@@ -461,34 +387,16 @@ public class TikiClientApp extends JFrame {
 		System.setProperty("awt.useSystemAAFontSettings", "on");
 		System.setProperty("swing.aatext", "true");
 		System.setProperty("flatlaf.uiScale", "1.2");
+		try { UIManager.setLookAndFeel(new FlatLightLaf()); } catch (Exception ex) { }
 
-		try {
-			UIManager.setLookAndFeel(new FlatLightLaf());
-		} catch (Exception ex) {
-		}
-
-		String testHost = "localhost";
-		boolean isAdmin = false;
+		String host = "auto";
+		boolean admin = false;
 		for (String arg : args) {
-			if (arg.equalsIgnoreCase("--admin")) {
-				isAdmin = true;
-			} else if (isValidHost(arg)) {
-				testHost = arg;
-			}
+			if (arg.equalsIgnoreCase("--admin")) admin = true;
+			else if (arg.matches("^\\d{1,3}(\\.\\d{1,3}){3}$") || arg.equalsIgnoreCase("localhost")) host = arg;
 		}
-
-		String host = testHost;
-		boolean admin = isAdmin;
-		SwingUtilities.invokeLater(() -> new TikiClientApp(host, admin).setVisible(true));
+		final String finalHost = host;
+		final boolean finalAdmin = admin;
+		SwingUtilities.invokeLater(() -> new TikiClientApp(finalHost, finalAdmin).setVisible(true));
 	}
-
-	public static boolean isValidHost(String host) {
-		try {
-			java.net.InetAddress.getByName(host);
-			return true;
-		} catch (java.net.UnknownHostException e) {
-			return false;
-		}
-	}
-
 }

@@ -78,7 +78,6 @@ public class DataCrawlerApp {
 				}
 			}
 
-			// Conclusion of the current round
 			if (!failedIds.isEmpty()) {
 				System.out.println(String.format("\n[RETRY] Round %d finished. %d items failed out of %d.", round,
 						failedIds.size(), totalInRound));

@@ -1,5 +1,8 @@
 package com.tiki.server;
 
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.KeyPair;
@@ -14,7 +17,8 @@ import com.tiki.common.CryptoUtils;
 import com.tiki.common.Product;
 
 public class TikiServer {
-	private static final int PORT = 12345;
+	private static final int PORT = 30000;
+	private static final int BPORT= 30255;
 	private static final int MAX_POOL = 10;
 
 	public static void main(String[] args) {
@@ -30,8 +34,9 @@ public class TikiServer {
 			System.out.println("[SYSTEM] --- TIKI TRACKER SERVER IS READY ---");
 
 			// Start the background processes
-//			startAutoPriceUpdater(dbManager, tikiService);
-			startAdminConsole(dbManager, tikiService);
+//			startAutoPriceUpdater(dbManager, tikiService); // auto update product's price
+		    startDiscoveryBeacon(); // Broadcast server ip
+			startAdminConsole(dbManager, tikiService); // Stdin/out console for admin
 
 			// Start Socket Server
 			ExecutorService clientPool = Executors.newFixedThreadPool(MAX_POOL);
@@ -42,7 +47,6 @@ public class TikiServer {
 					Socket client = serverSocket.accept();
 					System.out.println("[NETWORK] New client connected: " + client.getRemoteSocketAddress());
 
-					// Pass dependencies to ClientHandler
 					clientPool.execute(new ClientHandler(client, serverKeys, dbManager, tikiService));
 				}
 			}
@@ -50,6 +54,31 @@ public class TikiServer {
 			System.err.println("[CRITICAL] Server failed to start: " + e.getMessage());
 			e.printStackTrace();
 		}
+	}
+	
+	private static void startDiscoveryBeacon() {
+	    Thread beaconThread = new Thread(() -> {
+	        try (DatagramSocket socket = new DatagramSocket()) {
+	            socket.setBroadcast(true);
+	            String message = "TIKI_SERVER_DISCOVERY:"+PORT;
+	            byte[] buffer = message.getBytes();
+
+	            System.out.println("[SYSTEM] Discovery Beacon started (UDP Broadcast).");
+	            
+	            while (true) {
+	                DatagramPacket packet = new DatagramPacket(
+	                    buffer, buffer.length, 
+	                    InetAddress.getByName("255.255.255.255"), BPORT
+	                );
+	                socket.send(packet);
+	                Thread.sleep(3000);
+	            }
+	        } catch (Exception e) {
+	            System.err.println("[ERROR] Discovery Beacon failed: " + e.getMessage());
+	        }
+	    });
+	    beaconThread.setDaemon(true);
+	    beaconThread.start();
 	}
 
 	private static void startAdminConsole(DatabaseManager dbManager, TikiService tikiService) {
@@ -126,7 +155,7 @@ public class TikiServer {
 						System.out.println("[SCHEDULER] ID " + id + ": Price unchanged (" + lastPrice + ").");
 					}
 
-					Thread.sleep(2000); // Conservative rate limiting for auto-tasks
+					Thread.sleep(2000);
 				} catch (Exception e) {
 					System.err.println("[SCHEDULER] [ERROR] Failed to process ID " + id + ": " + e.getMessage());
 				}
