@@ -14,7 +14,7 @@
     java -jar TikiTracker-Server.jar
     ```
 
-2. Run `TikiTracker-Client.jar` for client, note that you can specify the server ip. If not, the default is `localhost`:
+2. Run `TikiTracker-Client.jar` for client, note that you can specify the server ip. Otherwise, the client will receive the IP address from the server's *broadcast* packet.:
 
     ```
     java -jar TikiTracker-Client.jar [server ip]
