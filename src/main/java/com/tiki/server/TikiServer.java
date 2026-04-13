@@ -22,6 +22,14 @@ public class TikiServer {
 	private static final int MAX_POOL = 10;
 
 	public static void main(String[] args) {
+		boolean disableAutoUpdate = false;
+		boolean enableConsole = false;
+
+		for (String arg : args) {
+			if (arg.equalsIgnoreCase("--disable-auto-update")) disableAutoUpdate = true;
+			else if (arg.equalsIgnoreCase("--console")) enableConsole = true;
+		}
+
 		try {
 			System.out.println("[SYSTEM] Initializing core components...");
 
@@ -34,9 +42,13 @@ public class TikiServer {
 			System.out.println("[SYSTEM] --- TIKI TRACKER SERVER IS READY ---");
 
 			// Start the background processes
-//			startAutoPriceUpdater(dbManager, tikiService); // auto update product's price
+			if (!disableAutoUpdate)
+				startAutoPriceUpdater(dbManager, tikiService); // auto update product's price
+
+		    if (enableConsole)
+		    	startAdminConsole(dbManager, tikiService); // Stdin/out console for admin
+
 		    startDiscoveryBeacon(); // Broadcast server ip
-			startAdminConsole(dbManager, tikiService); // Stdin/out console for admin
 
 			// Start Socket Server
 			ExecutorService clientPool = Executors.newFixedThreadPool(MAX_POOL);
