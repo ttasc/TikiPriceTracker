@@ -254,6 +254,9 @@ public class TikiClientApp extends JFrame {
 			}
 			productPanel.add(createProductCard(obj));
 		}
+		productPanel.revalidate();
+		productPanel.repaint();
+		contentScroll.getVerticalScrollBar().setValue(0);
 	}
 
 	private void loadCategories() {
