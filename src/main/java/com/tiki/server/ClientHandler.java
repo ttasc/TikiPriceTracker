@@ -40,7 +40,7 @@ public class ClientHandler implements Runnable {
 		try (DataInputStream in = new DataInputStream(socket.getInputStream());
 				DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
 
-			// --- SECURITY HANDSHAKE ---
+			// --- HANDSHAKE ---
 			byte[] pubKeyBytes = serverKeyPair.getPublic().getEncoded();
 			out.writeInt(pubKeyBytes.length);
 			out.write(pubKeyBytes);
@@ -54,7 +54,7 @@ public class ClientHandler implements Runnable {
 
 			System.out.println("[SECURITY] Hybrid handshake successful with: " + socket.getRemoteSocketAddress());
 
-			// --- REQUEST PROCESSING LOOP ---
+			// --- LOOP ---
 			while (true) {
 				String encryptedReq = in.readUTF();
 				String jsonReq = CryptoUtils.decryptAES(encryptedReq, sessionKey);
@@ -94,7 +94,7 @@ public class ClientHandler implements Runnable {
 				    JsonArray idArray = request.getAsJsonArray("ids");
 				    List<String> idList = new ArrayList<>();
 				    for (JsonElement e : idArray) idList.add(e.getAsString());
-				    
+
 				    List<Product> result = dbManager.getProductsByIds(idList);
 				    responseJson = gson.toJson(result);
 				    break;
@@ -104,7 +104,6 @@ public class ClientHandler implements Runnable {
 					boolean shouldTrack = request.get("isTracked").getAsBoolean();
 
 					if (shouldTrack) {
-						// Sync from Tiki and save to local DB
 						Product pDetail = tikiService.getProductDetail(pId);
 						dbManager.saveProduct(pDetail);
 						dbManager.updateTracking(pId, true);
@@ -135,7 +134,6 @@ public class ClientHandler implements Runnable {
 					break;
 				}
 
-				// Encrypt and send back the response
 				out.writeUTF(CryptoUtils.encryptAES(responseJson, sessionKey));
 				out.flush();
 			}
