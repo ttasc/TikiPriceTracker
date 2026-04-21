@@ -12,9 +12,6 @@
 - [Getting Started](#-getting-started)
 - [Usage](#-usage)
 - [Technical Highlights](#-technical-highlights)
-- [Project Structure](#-project-structure)
-- [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
 - [License](#-license)
 
 ---
@@ -195,53 +192,6 @@ java -jar TikiTracker-Crawler.jar
 
 * UDP Broadcast for server discovery
 * Eliminates manual IP configuration
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── server/      # Tracker Server module
-├── client/      # Desktop Client application
-├── crawler/     # Data crawling module
-├── imgs/        # Screenshots
-└── releases/    # Built JAR files
-```
-
----
-
-## 🛣️ Roadmap
-
-* [ ] Add REST API layer (optional web integration)
-* [ ] Dockerize system deployment
-* [ ] Improve UI/UX (modern UI framework)
-* [ ] Add multi-user authentication system
-* [ ] Cloud deployment (AWS / GCP)
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome!
-
-1. Fork the project
-2. Create your feature branch:
-
-   ```bash
-   git checkout -b feature/YourFeature
-   ```
-3. Commit your changes:
-
-   ```bash
-   git commit -m "Add some feature"
-   ```
-4. Push to the branch:
-
-   ```bash
-   git push origin feature/YourFeature
-   ```
-5. Open a Pull Request
 
 ---
 
